@@ -159,6 +159,7 @@ select option{background:#1a1d27}
   <div class="tab" onclick="showTab('step2')">🔀 振り分け</div>
   <div class="tab" onclick="showTab('step3')">📋 請求書確認</div>
   <div class="tab" onclick="showTab('step4')">📄 PDF出力</div>
+  <div class="tab" onclick="showTab('master')">⚙️ マスター管理</div>
   <div class="tab" onclick="showTab('howto')">📖 使い方</div>
 </div>
 
@@ -328,6 +329,66 @@ select option{background:#1a1d27}
   <div id="pdfPreviewArea"></div>
 </div>
 
+<!-- ===== マスター管理 ===== -->
+<div id="tab-master" class="page">
+  <div id="masterSavedBanner" class="alert alert-success" style="display:none">✅ 設定を保存しました。次回も反映されます。</div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔀</span>振り分けプルダウン選択肢</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">「大賀ホールレギュラー」「大賀ホールハイオク」は特殊処理のため削除しないでください。</div>
+    <div id="furibunMasterList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="newFuribunInput" type="text" placeholder="新しい選択肢を入力..."
+        style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px"
+        onkeydown="if(event.key==='Enter')addFuribunOption()">
+      <button class="btn btn-primary" onclick="addFuribunOption()">＋ 追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span>取引先マスター（請求書の宛名）</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">プルダウン選択値と請求書に印字される宛名の対応表です。宛名を変更したい場合はここで編集してください。</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:35%">プルダウン選択値</th><th style="width:50%">請求書の宛名</th><th>操作</th></tr></thead>
+        <tbody id="masterTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">新規追加</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="newMasterKey" type="text" placeholder="プルダウン選択値" style="flex:1;min-width:150px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <input id="newMasterVal" type="text" placeholder="請求書の宛名" style="flex:2;min-width:200px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <button class="btn btn-primary" onclick="addMasterRow()">＋ 追加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔄</span>CSV得意先名変換（部署統合対応）</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">CSVの得意先名を請求書宛名に変換するルールです。組織変更時はここに追加してください。</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:40%">CSVの得意先名（変換前）</th><th style="width:45%">変換後の名称</th><th>操作</th></tr></thead>
+        <tbody id="convertTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">新規追加</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="newConvertKey" type="text" placeholder="CSVの得意先名" style="flex:1;min-width:150px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <input id="newConvertVal" type="text" placeholder="変換後の名称" style="flex:2;min-width:200px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <button class="btn btn-primary" onclick="addConvertRow()">＋ 追加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="saveMaster()">💾 設定を保存</button>
+    <button class="btn btn-danger" onclick="resetMaster()">🔄 初期値に戻す</button>
+  </div>
+</div>
+
 <!-- ===== HOW TO ===== -->
 <div id="tab-howto" class="page">
   <div class="card">
@@ -415,11 +476,12 @@ let invoices = {}; // 生成された請求書データ
 // ================================================================
 function showTab(id) {
   document.querySelectorAll('.tab').forEach((t,i)=>{
-    const ids=['step1','step2','step3','step4','howto'];
+    const ids=['step1','step2','step3','step4','master','howto'];
     t.classList.toggle('active', ids[i]===id);
   });
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
+  if(id==='master') renderMaster();
 }
 
 // ================================================================
@@ -560,12 +622,8 @@ function convertYushu(kana){
 }
 
 function convertTName(n){
-  const map={
-    '軽井沢町役場　保健課':'軽井沢町役場 保健福祉課',
-    '軽井沢町役場　福祉課':'軽井沢町役場 保健福祉課',
-    '軽井沢町役場　企画財政課':'軽井沢町役場 総務課',
-  };
-  return map[n]||n;
+  const map = getConvertMap();
+  return map[n] || n;
 }
 
 function parseCSVLine(line){
@@ -715,7 +773,10 @@ function yushuTag(y){
 // ================================================================
 // STEP2：振り分けテーブル生成
 // ================================================================
-const FURIBUN_OPTIONS = [
+// ================================================================
+// マスターデータ（localStorage対応）
+// ================================================================
+const DEFAULT_FURIBUN = [
   'こども教育課　中保育園(携行缶)','こども教育課　保育園','こども教育課　保育園軽油',
   'こども教育課子育て支援センター','こども教育課児童館','こども教育課児童係',
   '教育委員会 借上','軽井沢病院　軽油','訪看借上','資料館(携行缶)',
@@ -727,12 +788,207 @@ const FURIBUN_OPTIONS = [
   '手入力①','手入力②','手入力③'
 ];
 
+const DEFAULT_MASTER = {
+  'こども教育課　保育園': '軽井沢町役場 こども教育課 保育園',
+  'こども教育課　保育園軽油': '軽井沢町役場 こども教育課 保育園',
+  'こども教育課子育て支援センター': '軽井沢町役場 こども教育課',
+  'こども教育課児童館': '軽井沢町役場 こども教育課児童館',
+  'こども教育課児童係': '軽井沢町役場 こども教育課',
+  'こども教育課児童館軽油': '軽井沢町役場 こども教育課児童館',
+  '教育委員会 借上': '軽井沢町役場 教育委員会 借上',
+  '訪看借上': '軽井沢町役場 訪問看護ステーション軽井沢',
+  '西部小教育委員会': '軽井沢町役場 西部小学校 教育委員会',
+  '中学校教育委員会': '軽井沢町役場 中学校 教育委員会',
+  '中部小教育委員会': '軽井沢町役場 中部小学校 教育委員会',
+  '追分郷土館教育委員会': '軽井沢町役場 追分郷土館 教育委員会',
+  '東部小教育委員会': '軽井沢町役場 東部小学校 教育委員会',
+  '放課後こども教室教育委員会軽油': '軽井沢町役場 放課後こども教室 教育委員会',
+  '堀辰雄教育委員会': '軽井沢町役場 堀辰雄文学館 教育委員会',
+  '歴史民俗資料館教育委員会': '軽井沢町役場 歴史民俗資料館 教育委員会',
+  '植物園教育委員会': '軽井沢町役場 植物園 教育委員会',
+  '総務課防災係': '軽井沢町役場 総務課',
+  '軽井沢病院　軽油': '軽井沢病院',
+  '大賀ホールレギュラー': '財団法人 軽井沢大賀ホール',
+  '大賀ホールハイオク': '財団法人 軽井沢大賀ホール',
+};
+
+const DEFAULT_CONVERT = {
+  '軽井沢町役場　保健課': '軽井沢町役場 保健福祉課',
+  '軽井沢町役場　福祉課': '軽井沢町役場 保健福祉課',
+  '軽井沢町役場　企画財政課': '軽井沢町役場 総務課',
+};
+
+// localStorage から読み込み（なければデフォルト）
+function loadMasterData(){
+  try {
+    const f = localStorage.getItem('furibunOptions');
+    const m = localStorage.getItem('masterMap');
+    const c = localStorage.getItem('convertMap');
+    return {
+      furibunOptions: f ? JSON.parse(f) : [...DEFAULT_FURIBUN],
+      masterMap: m ? JSON.parse(m) : {...DEFAULT_MASTER},
+      convertMap: c ? JSON.parse(c) : {...DEFAULT_CONVERT},
+    };
+  } catch(e) {
+    return {
+      furibunOptions: [...DEFAULT_FURIBUN],
+      masterMap: {...DEFAULT_MASTER},
+      convertMap: {...DEFAULT_CONVERT},
+    };
+  }
+}
+
+let masterData = loadMasterData();
+
+function getFuribunOptions(){ return masterData.furibunOptions; }
+function getMasterMap(){ return masterData.masterMap; }
+function getConvertMap(){ return masterData.convertMap; }
+
+// ================================================================
+// マスター管理画面
+// ================================================================
+function renderMaster(){
+  // プルダウン選択肢リスト
+  const opts = getFuribunOptions();
+  const PROTECTED = ['大賀ホールレギュラー','大賀ホールハイオク'];
+  document.getElementById('furibunMasterList').innerHTML = opts.map((o,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+      <span style="font-size:13px;flex:1">${o}</span>
+      ${PROTECTED.includes(o)
+        ? '<span style="font-size:10px;color:var(--accent2);padding:2px 6px;background:rgba(245,158,11,.15);border-radius:4px">保護</span>'
+        : `<button onclick="deleteFuribunOption(${i})" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:3px 8px;border-radius:4px;font-size:11px">削除</button>`
+      }
+    </div>
+  `).join('');
+
+  // 取引先マスター
+  const mm = getMasterMap();
+  document.getElementById('masterTbody').innerHTML = Object.entries(mm).map(([k,v])=>`
+    <tr>
+      <td style="font-size:12px">${k}</td>
+      <td>
+        <input type="text" value="${v}" data-key="${k}"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px"
+          onchange="updateMasterVal(this)">
+      </td>
+      <td>
+        <button onclick="deleteMasterRow('${k}')" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:11px">削除</button>
+      </td>
+    </tr>
+  `).join('');
+
+  // 変換マスター
+  const cm = getConvertMap();
+  document.getElementById('convertTbody').innerHTML = Object.entries(cm).map(([k,v])=>`
+    <tr>
+      <td style="font-size:12px">${k}</td>
+      <td>
+        <input type="text" value="${v}" data-key="${k}"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px"
+          onchange="updateConvertVal(this)">
+      </td>
+      <td>
+        <button onclick="deleteConvertRow('${k}')" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:11px">削除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function addFuribunOption(){
+  const input = document.getElementById('newFuribunInput');
+  const val = input.value.trim();
+  if(!val){ alert('選択肢を入力してください'); return; }
+  if(masterData.furibunOptions.includes(val)){ alert('すでに存在します'); return; }
+  masterData.furibunOptions.push(val);
+  input.value = '';
+  renderMaster();
+}
+
+function deleteFuribunOption(idx){
+  const PROTECTED = ['大賀ホールレギュラー','大賀ホールハイオク'];
+  const opt = masterData.furibunOptions[idx];
+  if(PROTECTED.includes(opt)){ alert('この選択肢は削除できません'); return; }
+  if(!confirm(`「${opt}」を削除しますか？`)){ return; }
+  masterData.furibunOptions.splice(idx, 1);
+  renderMaster();
+}
+
+function addMasterRow(){
+  const k = document.getElementById('newMasterKey').value.trim();
+  const v = document.getElementById('newMasterVal').value.trim();
+  if(!k||!v){ alert('両方入力してください'); return; }
+  masterData.masterMap[k] = v;
+  document.getElementById('newMasterKey').value = '';
+  document.getElementById('newMasterVal').value = '';
+  renderMaster();
+}
+
+function updateMasterVal(input){
+  const k = input.dataset.key;
+  masterData.masterMap[k] = input.value.trim();
+}
+
+function deleteMasterRow(k){
+  if(!confirm(`「${k}」を削除しますか？`)){ return; }
+  delete masterData.masterMap[k];
+  renderMaster();
+}
+
+function addConvertRow(){
+  const k = document.getElementById('newConvertKey').value.trim();
+  const v = document.getElementById('newConvertVal').value.trim();
+  if(!k||!v){ alert('両方入力してください'); return; }
+  masterData.convertMap[k] = v;
+  document.getElementById('newConvertKey').value = '';
+  document.getElementById('newConvertVal').value = '';
+  renderMaster();
+}
+
+function updateConvertVal(input){
+  const k = input.dataset.key;
+  masterData.convertMap[k] = input.value.trim();
+}
+
+function deleteConvertRow(k){
+  if(!confirm(`「${k}」を削除しますか？`)){ return; }
+  delete masterData.convertMap[k];
+  renderMaster();
+}
+
+function saveMaster(){
+  try {
+    localStorage.setItem('furibunOptions', JSON.stringify(masterData.furibunOptions));
+    localStorage.setItem('masterMap', JSON.stringify(masterData.masterMap));
+    localStorage.setItem('convertMap', JSON.stringify(masterData.convertMap));
+    const b = document.getElementById('masterSavedBanner');
+    b.style.display='flex';
+    setTimeout(()=>b.style.display='none', 3000);
+  } catch(e) {
+    alert('保存に失敗しました: ' + e.message);
+  }
+}
+
+function resetMaster(){
+  if(!confirm('すべての設定を初期値に戻しますか？この操作は元に戻せません。')){ return; }
+  localStorage.removeItem('furibunOptions');
+  localStorage.removeItem('masterMap');
+  localStorage.removeItem('convertMap');
+  masterData = loadMasterData();
+  renderMaster();
+}
+
+// ================================================================
+// プルダウン・宛名取得（マスターデータ使用）
+// ================================================================
+let FURIBUN_OPTIONS = getFuribunOptions(); // 後方互換のため残す
+
 function goToStep2(){
   buildFuribunTable();
   showTab('step2');
 }
 
 function buildFuribunTable(){
+  const opts = getFuribunOptions();
   const tbody = document.getElementById('furibunTbody');
   tbody.innerHTML = rows441.map((r,i)=>`
     <tr>
@@ -746,7 +1002,7 @@ function buildFuribunTable(){
       <td>
         <select data-idx="${i}" onchange="checkFuribun()">
           <option value="">-- 選択してください --</option>
-          ${FURIBUN_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('')}
+          ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
         </select>
       </td>
     </tr>
@@ -911,28 +1167,7 @@ function calcTotal(rows, yushu){
 }
 
 function getFuribunSeikyuSaki(sel){
-  // 選択値から請求先名を決定（VBAの★取引先マスター相当）
-  const map = {
-    'こども教育課　保育園': '軽井沢町役場 こども教育課 保育園',
-    'こども教育課　保育園軽油': '軽井沢町役場 こども教育課 保育園',
-    'こども教育課子育て支援センター': '軽井沢町役場 こども教育課',
-    'こども教育課児童館': '軽井沢町役場 こども教育課児童館',
-    'こども教育課児童係': '軽井沢町役場 こども教育課',
-    'こども教育課児童館軽油': '軽井沢町役場 こども教育課児童館',
-    '教育委員会 借上': '軽井沢町役場 教育委員会 借上',
-    '訪看借上': '軽井沢町役場 訪問看護ステーション軽井沢',
-    '西部小教育委員会': '軽井沢町役場 西部小学校 教育委員会',
-    '中学校教育委員会': '軽井沢町役場 中学校 教育委員会',
-    '中部小教育委員会': '軽井沢町役場 中部小学校 教育委員会',
-    '追分郷土館教育委員会': '軽井沢町役場 追分郷土館 教育委員会',
-    '東部小教育委員会': '軽井沢町役場 東部小学校 教育委員会',
-    '放課後こども教室教育委員会軽油': '軽井沢町役場 放課後こども教室 教育委員会',
-    '堀辰雄教育委員会': '軽井沢町役場 堀辰雄文学館 教育委員会',
-    '歴史民俗資料館教育委員会': '軽井沢町役場 歴史民俗資料館 教育委員会',
-    '植物園教育委員会': '軽井沢町役場 植物園 教育委員会',
-    '総務課防災係': '軽井沢町役場 総務課',
-    '軽井沢病院　軽油': '軽井沢病院',
-  };
+  const map = getMasterMap();
   return map[sel] || `軽井沢町役場 ${sel}`;
 }
 
