@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>燃料請求書自動生成システム | 相馬商事 セルフ中軽井沢SS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+:root{
+  --primary:#1a3a5c;--primary-light:#2e6da4;--accent:#e8a020;
+  --success:#2d8a4e;--danger:#c0392b;--bg:#f0f4f8;
+  --surface:#fff;--border:#d0dce8;--text:#1a2a3a;--text-muted:#6b7f94;
+  --shadow:0 2px 12px rgba(26,58,92,.1);--shadow-lg:0 8px 32px rgba(26,58,92,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* ナビ */
+nav{background:var(--primary);color:#fff;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2);position:sticky;top:0;z-index:200;}
+.nav-left{display:flex;align-items:center;gap:12px;}
+.nav-logo{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-title{font-size:15px;font-weight:700;}
+.nav-sub{font-size:10px;color:rgba(255,255,255,.6);}
+.nav-tabs{display:flex;gap:4px;}
+.nav-tab{padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .2s;}
+.nav-tab.active{background:var(--accent);color:#fff;}
+.nav-tab:not(.active){background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);}
+.nav-tab:not(.active):hover{background:rgba(255,255,255,.2);}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,.7);}
+.dot{width:7px;height:7px;background:#4ade80;border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* タブパネル */
+.tab-panel{display:none;}.tab-panel.active{display:block;}
+
+/* ─── TAB1：CSVアップロード・振り分け ─── */
+.container{max-width:1100px;margin:0 auto;padding:28px 20px;}
+.steps{display:flex;align-items:center;background:var(--surface);border-radius:12px;padding:18px 28px;box-shadow:var(--shadow);margin-bottom:24px;gap:0;}
+.step{display:flex;align-items:center;flex:1;cursor:pointer;}
+.step-circle{width:34px;height:34px;border-radius:50%;background:var(--border);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;transition:all .3s;}
+.step.active .step-circle{background:var(--primary);color:#fff;box-shadow:0 0 0 4px rgba(26,58,92,.15);}
+.step.done .step-circle{background:var(--success);color:#fff;}
+.step-label{margin-left:8px;font-size:12px;font-weight:500;color:var(--text-muted);}
+.step.active .step-label{color:var(--primary);font-weight:700;}
+.step.done .step-label{color:var(--success);}
+.step-line{flex:1;height:2px;background:var(--border);margin:0 10px;transition:background .3s;}
+.step-line.done{background:var(--success);}
+.panel{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px;display:none;}
+.panel.active{display:block;animation:fadeIn .3s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.panel-header{background:var(--primary);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:10px;}
+.panel-icon{width:30px;height:30px;background:rgba(255,255,255,.15);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;}
+.panel-title{font-size:14px;font-weight:700;}
+.panel-desc{font-size:11px;color:rgba(255,255,255,.7);margin-top:1px;}
+.panel-body{padding:22px;}
+.upload-area{border:2px dashed var(--border);border-radius:10px;padding:44px 28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);position:relative;}
+.upload-area:hover,.upload-area.dragover{border-color:var(--primary-light);background:#eef4fb;}
+.upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-icon{font-size:44px;margin-bottom:14px;}
+.upload-text{font-size:14px;font-weight:500;margin-bottom:4px;}
+.upload-hint{font-size:11px;color:var(--text-muted);}
+.upload-done{display:flex;align-items:center;gap:10px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:12px 16px;margin-top:14px;font-size:12px;color:var(--success);font-weight:500;}
+.data-table{width:100%;border-collapse:collapse;font-size:12px;}
+.data-table th{background:var(--primary);color:#fff;padding:9px 12px;text-align:left;font-weight:500;font-size:11px;}
+.data-table td{padding:9px 12px;border-bottom:1px solid var(--border);}
+.data-table tr:nth-child(even) td{background:var(--bg);}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;}
+.badge-regular{background:#e3f2fd;color:#1565c0;}
+.badge-keiyu{background:#fff3e0;color:#e65100;}
+.badge-hioak{background:#f3e5f5;color:#6a1b9a;}
+.badge-toyu{background:#e8f5e9;color:#2e7d32;}
+.badge-haita{background:#fce4ec;color:#880e4f;}
+.badge-2cycle{background:#fff8e1;color:#f57f17;}
+select{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:var(--text);cursor:pointer;min-width:160px;}
+select:focus{outline:none;border-color:var(--primary-light);}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .2s;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-light);transform:translateY(-1px);}
+.btn-accent{background:var(--accent);color:#fff;}
+.btn-accent:hover{filter:brightness(1.1);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-outline{background:transparent;color:var(--primary);border:2px solid var(--primary);}
+.btn-outline:hover{background:var(--primary);color:#fff;}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+.btn-row{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:14px;}
+.result-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:all .2s;cursor:pointer;}
+.result-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px);border-color:var(--primary-light);}
+.result-card-header{background:var(--primary);color:#fff;padding:10px 14px;font-size:12px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}
+.result-card-body{padding:12px;font-size:12px;}
+.result-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);}
+.result-row:last-child{border-bottom:none;}
+.result-label{color:var(--text-muted);}
+.result-value{font-weight:600;font-family:'Courier New',monospace;}
+.result-total{font-size:17px;font-weight:700;color:var(--primary);text-align:right;margin-top:8px;font-family:'Courier New',monospace;}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border-radius:10px;padding:14px 18px;box-shadow:var(--shadow);border-left:4px solid var(--primary);}
+.stat-label{font-size:10px;color:var(--text-muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;}
+.stat-value{font-size:22px;font-weight:700;color:var(--primary);font-family:'Courier New',monospace;}
+.alert{padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;}
+.alert-info{background:#e3f2fd;border-left:4px solid #1565c0;color:#1565c0;}
+.alert-success{background:#e8f5e9;border-left:4px solid var(--success);color:var(--success);}
+.alert-warning{background:#fff8e1;border-left:4px solid var(--accent);color:#856404;}
+.progress-wrap{margin:14px 0;}
+.progress-label{font-size:11px;color:var(--text-muted);margin-bottom:5px;display:flex;justify-content:space-between;}
+.progress-bar{height:7px;background:var(--border);border-radius:4px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-light));border-radius:4px;transition:width .5s ease;}
+.furibun-table{width:100%;border-collapse:collapse;font-size:12px;}
+.furibun-table th{background:var(--primary);color:#fff;padding:8px 10px;text-align:left;font-weight:500;}
+.furibun-table td{padding:7px 10px;border-bottom:1px solid var(--border);}
+.furibun-table tr.no-select td{background:#fff9e6;}
+.furibun-table tr.selected td{background:#e8f5e9;}
+
+/* ─── TAB2：PDF生成 ─── */
+.pdf-container{max-width:1100px;margin:0 auto;padding:28px 20px;display:grid;grid-template-columns:320px 1fr;gap:22px;}
+.form-panel{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;height:fit-content;}
+.form-header{background:var(--primary);color:#fff;padding:14px 20px;font-size:13px;font-weight:700;}
+.form-body{padding:18px;}
+.form-section{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+.form-section:last-child{border-bottom:none;margin-bottom:0;}
+.section-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
+.form-row{margin-bottom:8px;}
+label{display:block;font-size:10px;color:var(--text-muted);margin-bottom:3px;font-weight:500;}
+input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;color:var(--text);background:#fff;transition:border-color .2s;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary-light);}
+textarea{resize:vertical;min-height:60px;}
+.meisai-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+.meisai-table th{background:var(--primary);color:#fff;padding:5px 7px;text-align:center;font-weight:500;}
+.meisai-table td{padding:3px 5px;border:1px solid var(--border);}
+.meisai-table input{padding:3px 5px;border:none;background:transparent;font-size:11px;text-align:right;}
+.meisai-table input[type=text]{text-align:left;}
+.meisai-table input:focus{background:#eef4fb;border-radius:3px;}
+.btn-sm{padding:5px 11px;font-size:11px;}
+.btn-add{background:#e8f5e9;color:var(--success);border:1px solid #a5d6a7;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600;}
+.preview-panel{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+.preview-header{background:var(--primary);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+.preview-header-title{font-size:13px;font-weight:700;}
+.preview-body{padding:18px;background:#e8ecf0;min-height:580px;display:flex;justify-content:center;align-items:flex-start;}
+.invoice-preview{background:#fff;width:100%;max-width:560px;min-height:800px;padding:26px;box-shadow:0 4px 20px rgba(0,0,0,.15);font-size:10px;position:relative;}
+.inv-title{text-align:center;font-size:20px;font-weight:700;letter-spacing:.3em;margin-bottom:6px;}
+.inv-date-row{text-align:right;font-size:11px;margin-bottom:14px;}
+.inv-to-from{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.inv-to{font-size:14px;font-weight:700;padding-bottom:3px;border-bottom:2px solid #333;}
+.inv-to-sub{font-size:9px;color:#666;margin-top:3px;}
+.inv-from{text-align:right;font-size:10px;line-height:1.8;}
+.inv-amount-box{border:2px solid #333;border-radius:4px;padding:9px 14px;display:flex;align-items:center;gap:14px;margin-bottom:14px;background:#f9f9f9;}
+.inv-amount-label{font-size:11px;font-weight:700;white-space:nowrap;}
+.inv-amount-value{font-size:20px;font-weight:700;color:#1a3a5c;font-family:'Courier New',monospace;}
+.inv-tax-info{font-size:9px;color:#666;margin-left:auto;line-height:1.6;}
+.inv-message{font-size:9px;color:#444;margin-bottom:10px;}
+.inv-table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:7px;}
+.inv-table th{background:#2c4a6e;color:#fff;padding:4px 7px;text-align:center;font-weight:500;border:1px solid #2c4a6e;}
+.inv-table td{padding:4px 7px;border:1px solid #ccc;}
+.inv-table .td-right{text-align:right;font-family:'Courier New',monospace;}
+.inv-table .td-center{text-align:center;}
+.inv-table .subtotal-row td{background:#eef4fb;font-weight:600;}
+.inv-table .total-row td{background:#dce8f5;font-weight:700;font-size:10px;}
+.inv-bank{margin-top:10px;padding:7px 10px;background:#f5f5f5;border-radius:4px;font-size:9px;color:#444;}
+.inv-note{margin-top:7px;font-size:8px;color:#888;border-top:1px solid #ddd;padding-top:5px;}
+.inv-stamp{position:absolute;top:26px;right:26px;width:56px;height:56px;border:2px solid #c00;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#c00;font-size:7px;font-weight:700;text-align:center;line-height:1.3;transform:rotate(-15deg);}
+.alert-dl{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--success);margin-bottom:10px;display:none;}
+
+/* ─── TAB3：使い方 ─── */
+.guide-container{max-width:900px;margin:0 auto;padding:28px 20px;}
+.guide-card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;}
+.guide-card-header{background:var(--primary);color:#fff;padding:14px 20px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.guide-card-body{padding:22px;}
+.guide-step{display:flex;gap:16px;margin-bottom:18px;align-items:flex-start;}
+.guide-step:last-child{margin-bottom:0;}
+.guide-num{width:36px;height:36px;background:var(--primary);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+.guide-content{flex:1;}
+.guide-title{font-size:14px;font-weight:700;margin-bottom:4px;}
+.guide-desc{font-size:12px;color:var(--text-muted);line-height:1.7;}
+.roadmap{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.roadmap-item{padding:16px;border-radius:10px;border:2px solid var(--border);text-align:center;}
+.roadmap-item.done{border-color:var(--success);background:#e8f5e9;}
+.roadmap-item.current{border-color:var(--accent);background:#fff8e1;}
+.roadmap-item.future{border-color:var(--border);background:var(--bg);}
+.roadmap-icon{font-size:28px;margin-bottom:8px;}
+.roadmap-title{font-size:13px;font-weight:700;margin-bottom:4px;}
+.roadmap-desc{font-size:11px;color:var(--text-muted);}
+
+@media(max-width:768px){
+  .pdf-container{grid-template-columns:1fr;}
+  .stats-bar{grid-template-columns:repeat(2,1fr);}
+  .result-grid{grid-template-columns:1fr;}
+  .roadmap{grid-template-columns:1fr;}
+  .nav-tabs .nav-tab span{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ナビゲーション -->
+<nav>
+  <div class="nav-left">
+    <div class="nav-logo">⛽</div>
+    <div>
+      <div class="nav-title">燃料請求書自動生成システム</div>
+      <div class="nav-sub">相馬商事株式会社　セルフ中軽井沢SS　— Web版プロトタイプ</div>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('tab1')">📊 <span>CSV処理</span></button>
+    <button class="nav-tab"       onclick="showTab('tab2')">📄 <span>PDF生成</span></button>
+    <button class="nav-tab"       onclick="showTab('tab3')">📖 <span>使い方</span></button>
+  </div>
+  <div class="status"><div class="dot"></div>稼働中</div>
+</nav>
+
+<!-- ══════════ TAB1：CSV処理・振り分け ══════════ -->
+<div id="tab1" class="tab-panel active">
+<div class="container">
+
+  <div class="steps">
+    <div class="step active" id="step1"><div class="step-circle">1</div><div class="step-label">CSVアップロード</div></div>
+    <div class="step-line" id="line1"></div>
+    <div class="step" id="step2"><div class="step-circle">2</div><div class="step-label">振り分け</div></div>
+    <div class="step-line" id="line2"></div>
+    <div class="step" id="step3"><div class="step-circle">3</div><div class="step-label">請求書生成</div></div>
+    <div class="step-line" id="line3"></div>
+    <div class="step" id="step4"><div class="step-circle">4</div><div class="step-label">完了・出力</div></div>
+  </div>
+
+  <!-- STEP1 -->
+  <div class="panel active" id="panel1">
+    <div class="panel-header"><div class="panel-icon">📂</div><div><div class="panel-title">STEP 1：CSVファイルをアップロード</div><div class="panel-desc">ガーデンシステムから出力したCSVを選択してください（Shift-JIS形式対応）</div></div></div>
+    <div class="panel-body">
+      <div class="alert alert-info">💡 レコード種別151のデータを自動抽出します。デモデータも入っています。</div>
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="csvFile" accept=".csv" onchange="handleCSV(event)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">CSVファイルをドロップ、またはクリックして選択</div>
+        <div class="upload-hint">対応形式：.csv（Shift-JIS / UTF-8）</div>
+      </div>
+      <div id="uploadDone" class="hidden" style="display:none;">
+        <div class="upload-done">✅ <span id="uploadFileName"></span>　→　<span id="uploadCount"></span> 件のデータを読み込みました</div>
+      </div>
+      <div id="csvPreview" style="display:none;margin-top:20px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--primary);">📊 読み込みデータ（上位10件）</div>
+        <div style="overflow-x:auto;"><table class="data-table" id="previewTable"></table></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="nextBtn1" onclick="goStep(2)" disabled>次へ：振り分け設定 →</button>
+        <button class="btn btn-outline" onclick="loadDemoData()">🔍 デモデータで試す</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP2 -->
+  <div class="panel" id="panel2">
+    <div class="panel-header"><div class="panel-icon">🔀</div><div><div class="panel-title">STEP 2：050441（役場本体）の振り分け</div><div class="panel-desc">各取引の請求先をプルダウンから選択してください</div></div></div>
+    <div class="panel-body">
+      <div class="alert alert-warning" id="furibunAlert">⚠️ 未選択の行があります。すべて選択してから次へ進んでください。</div>
+      <div style="overflow-x:auto;">
+        <table class="furibun-table" id="furibunTable">
+          <thead><tr><th>No.</th><th>日付</th><th>品名</th><th>数量(L)</th><th>単価</th><th>金額</th><th>請求先選択 ▼</th></tr></thead>
+          <tbody id="furibunBody"></tbody>
+        </table>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goStep(1)">← 戻る</button>
+        <button class="btn btn-primary" id="nextBtn2" onclick="goStep(3)" disabled>請求書を生成する →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP3 -->
+  <div class="panel" id="panel3">
+    <div class="panel-header"><div class="panel-icon">📋</div><div><div class="panel-title">STEP 3：請求書生成結果</div><div class="panel-desc">取引先別に請求書を自動生成しました</div></div></div>
+    <div class="panel-body">
+      <div class="stats-bar" id="statsBar"></div>
+      <div id="progressWrap" class="progress-wrap"><div class="progress-label"><span>生成中...</span><span id="progressPct">0%</span></div><div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div></div>
+      <div id="resultCards" class="result-grid"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goStep(2)">← 戻る</button>
+        <button class="btn btn-primary" onclick="goStep(4)">出力・完了へ →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP4 -->
+  <div class="panel" id="panel4">
+    <div class="panel-header"><div class="panel-icon">✅</div><div><div class="panel-title">STEP 4：完了</div><div class="panel-desc">請求書の確認・出力を行います</div></div></div>
+    <div class="panel-body">
+      <div class="alert alert-success">🎉 全請求書の生成が完了しました！</div>
+      <div class="stats-bar">
+        <div class="stat-card"><div class="stat-label">生成件数</div><div class="stat-value" id="finalCount">-</div></div>
+        <div class="stat-card" style="border-left-color:var(--accent);"><div class="stat-label">合計請求額</div><div class="stat-value" id="finalTotal">-</div></div>
+        <div class="stat-card" style="border-left-color:var(--success);"><div class="stat-label">処理日時</div><div class="stat-value" id="finalDate" style="font-size:13px;margin-top:4px;">-</div></div>
+        <div class="stat-card" style="border-left-color:#e74c3c;"><div class="stat-label">調整額確認</div><div class="stat-value" style="font-size:13px;color:#e74c3c;margin-top:4px;">要確認</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px;">
+        <div style="background:var(--bg);border-radius:10px;padding:18px;border:1px solid var(--border);">
+          <div style="font-weight:700;margin-bottom:10px;font-size:13px;">📄 出力オプション</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="btn btn-primary" onclick="alert('PDF一括出力：本番版で実装予定です。\n現在はPDF生成タブで個別に生成できます。')">🖨️ PDF一括出力</button>
+            <button class="btn btn-outline" onclick="showTab('tab2')">📝 PDF生成タブへ</button>
+          </div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:18px;border:1px solid var(--border);">
+          <div style="font-weight:700;margin-bottom:10px;font-size:13px;">📬 次のステップ</div>
+          <div style="font-size:12px;line-height:2;color:var(--text-muted);">
+            ☑ 請求書の内容確認<br>☑ 調整額の計算・記録<br>☑ 封筒への封入・郵送<br>☐ 入金確認（20日・月末）<br>☐ 本社経理へ報告
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="resetAll()">🔄 新しい月のデータを処理する</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════ TAB2：PDF生成 ══════════ -->
+<div id="tab2" class="tab-panel">
+<div class="pdf-container">
+  <div class="form-panel">
+    <div class="form-header">📝 請求書情報入力</div>
+    <div class="form-body">
+      <div class="form-section">
+        <div class="section-title">請求先</div>
+        <div class="form-row"><label>宛先（H40）</label><input type="text" id="destName" value="軽井沢町役場　農林課" oninput="updatePreview()"></div>
+        <div class="form-row"><label>敬称</label><select id="keisho" onchange="updatePreview()"><option value="様">様</option><option value="御中" selected>御中</option></select></div>
+      </div>
+      <div class="form-section">
+        <div class="section-title">請求日・期間</div>
+        <div class="form-row"><label>請求日（F44）</label><input type="date" id="invoiceDate" oninput="updatePreview()"></div>
+        <div class="form-row"><label>締切日</label><input type="date" id="cutDate" oninput="updatePreview()"></div>
+      </div>
+      <div class="form-section">
+        <div class="section-title">明細</div>
+        <table class="meisai-table">
+          <thead><tr><th style="width:58px">納品月日</th><th>品名</th><th style="width:42px">数量</th><th style="width:42px">単価</th></tr></thead>
+          <tbody id="meisaiBody"></tbody>
+        </table>
+        <button class="btn-add btn-sm" onclick="addMeisai()">＋ 明細を追加</button>
+      </div>
+      <div id="alertDl" class="alert-dl">✅ PDFをダウンロードしました。</div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px;" onclick="updatePreview()">🔄 プレビュー更新</button>
+      <button class="btn btn-accent"  style="width:100%;" onclick="generatePDF()">📄 PDFをダウンロード</button>
+    </div>
+  </div>
+  <div class="preview-panel">
+    <div class="preview-header"><div class="preview-header-title">📋 請求書プレビュー（リアルタイム）</div></div>
+    <div class="preview-body"><div class="invoice-preview" id="invoicePreview"></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════ TAB3：使い方 ══════════ -->
+<div id="tab3" class="tab-panel">
+<div class="guide-container">
+
+  <div class="guide-card">
+    <div class="guide-card-header">📖 月次作業の流れ</div>
+    <div class="guide-card-body">
+      <div class="guide-step"><div class="guide-num">1</div><div class="guide-content"><div class="guide-title">ガーデンPDFをClaudeに送る</div><div class="guide-desc">各取引先のお買上額をClaudeが読み取り、★お買上額入力シートに入力します。</div></div></div>
+      <div class="guide-step"><div class="guide-num">2</div><div class="guide-content"><div class="guide-title">CSVアップロード・振り分け（このシステム）</div><div class="guide-desc">ガーデンCSVをアップロードし、役場本体（050441）の取引を課別に振り分けます。</div></div></div>
+      <div class="guide-step"><div class="guide-num">3</div><div class="guide-content"><div class="guide-title">PDF生成（このシステム）</div><div class="guide-desc">PDF生成タブで各取引先の請求書PDFをダウンロードします。</div></div></div>
+      <div class="guide-step"><div class="guide-num">4</div><div class="guide-content"><div class="guide-title">印刷・郵送</div><div class="guide-desc">農林課→封筒は「環境課」宛、保健福祉課→「福祉課こもれびの里」宛に送付します。</div></div></div>
+      <div class="guide-step"><div class="guide-num">5</div><div class="guide-content"><div class="guide-title">入金確認（月2回）</div><div class="guide-desc">20日・月末に入金確認用ファイルを更新し、本社経理に報告します。</div></div></div>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-card-header">🗺️ システムのロードマップ</div>
+    <div class="guide-card-body">
+      <div class="roadmap">
+        <div class="roadmap-item done"><div class="roadmap-icon">✅</div><div class="roadmap-title">Phase 1（完了）</div><div class="roadmap-desc">ExcelマクロでCSV→請求書自動生成。月次作業を大幅効率化。</div></div>
+        <div class="roadmap-item current"><div class="roadmap-icon">🚀</div><div class="roadmap-title">Phase 2（現在）</div><div class="roadmap-desc">Web版プロトタイプ公開。ブラウザでCSV処理・PDF生成が可能に。</div></div>
+        <div class="roadmap-item future"><div class="roadmap-icon">🌟</div><div class="roadmap-title">Phase 3（予定）</div><div class="roadmap-desc">データ蓄積・複数店舗対応・本社自動レポート機能を追加。</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-card-header">⚙️ 部署変換マスター（組織変更対応）</div>
+    <div class="guide-card-body">
+      <table class="data-table">
+        <thead><tr><th>CSVの得意先名（変換前）</th><th>請求書の宛先名（変換後・H40）</th><th>備考</th></tr></thead>
+        <tbody>
+          <tr><td>軽井沢町役場　保健課</td><td>軽井沢町役場　保健福祉課</td><td>保健課→保健福祉課統合</td></tr>
+          <tr><td>軽井沢町役場　福祉課</td><td>軽井沢町役場　保健福祉課</td><td>福祉課→保健福祉課統合</td></tr>
+          <tr><td>軽井沢町役場　企画財政課</td><td>軽井沢町役場　総務課</td><td>企画財政課→総務課統合</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+// ══════════ TAB切り替え ══════════
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const idx = ['tab1','tab2','tab3'].indexOf(id);
+  document.querySelectorAll('.nav-tab')[idx].classList.add('active');
+  if (id === 'tab2') { initPDFTab(); }
+}
+
+// ══════════ TAB1：CSV処理 ══════════
+let csvData = [], furibunSelections = {}, generatedInvoices = {};
+
+const YUSHU = {
+  'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ': {l:'レギュラーガソリン', c:'badge-regular'},
+  'ENEOSﾊｲｵｸ':   {l:'ENEOSハイオク',      c:'badge-hioak'},
+  'ｹｲﾕ':          {l:'軽油',              c:'badge-keiyu'},
+  'ﾄｳﾕ':          {l:'灯油',              c:'badge-toyu'},
+  'ﾊｲﾀﾂﾄｳﾕ':     {l:'配達灯油',           c:'badge-haita'},
+};
+
+const FURIBUN_OPTIONS = [
+  '','こども教育課　中保育園 (携行缶)','こども教育課　保育園','こども教育課　保育園軽油',
+  'こども教育課子育て支援センター','こども教育課児童館','こども教育課児童係',
+  '教育委員会 借上','軽井沢病院　軽油','訪看借上','資料館 (携行缶)',
+  '植物園教育委員会','西部小教育委員会','大賀ホールレギュラー','大賀ホールハイオク',
+  '中学校教育委員会','中部小教育委員会','追分郷土館教育委員会','東部小教育委員会',
+  '放課後こども教室教育委員会軽油','堀辰雄教育委員会','歴史民俗資料館教育委員会','総務課防災係',
+];
+
+const DEPT_MAP = {
+  '軽井沢町役場　企画財政課': '軽井沢町役場　総務課',
+  '軽井沢町役場　保健課':     '軽井沢町役場　保健福祉課',
+  '軽井沢町役場　福祉課':     '軽井沢町役場　保健福祉課',
+};
+
+function getDemoData() {
+  return [
+    {date:'20260501',name:'軽井沢町役場',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:20,tanka:159,kingaku:3180,fugo:0},
+    {date:'20260507',name:'軽井沢町役場',shohin:'ENEOSﾊｲｵｸ',suryo:24,tanka:169,kingaku:4056,fugo:0},
+    {date:'20260508',name:'軽井沢町役場',shohin:'ｹｲﾕ',suryo:50,tanka:140,kingaku:7000,fugo:0},
+    {date:'20260510',name:'軽井沢町役場　農林課',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:152,tanka:159,kingaku:24168,fugo:0},
+    {date:'20260512',name:'軽井沢町役場　企画財政課',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:246,tanka:159,kingaku:39114,fugo:0},
+    {date:'20260514',name:'軽井沢町役場　保健課',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:76,tanka:159,kingaku:12084,fugo:0},
+    {date:'20260515',name:'風越アリーナ',shohin:'ﾊｲﾀﾂﾄｳﾕ',suryo:2000,tanka:137,kingaku:274000,fugo:0},
+    {date:'20260520',name:'社会福祉　協議会',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:207,tanka:159,kingaku:32913,fugo:0},
+    {date:'20260522',name:'軽井沢町役場',shohin:'2ｻｲｸﾙｽﾋﾟｰﾄﾞ  4L*6',suryo:4,tanka:1100,kingaku:4400,fugo:0},
+    {date:'20260525',name:'軽井沢町役場　上下水道課',shohin:'ﾚｷﾞｭﾗ-ｶﾞｿﾘﾝ',suryo:26,tanka:159,kingaku:4134,fugo:0},
+  ];
+}
+
+function loadDemoData() {
+  csvData = getDemoData();
+  showCSVResult('デモデータ', csvData);
+}
+
+function handleCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const decoder = new TextDecoder('shift-jis');
+      parseCSV(decoder.decode(ev.target.result), file.name);
+    } catch(e) { parseCSV(ev.target.result, file.name); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseCSV(text, fileName) {
+  const lines = text.split('\n').filter(l => l.trim());
+  const h = lines[0].split(',').map(c => c.replace(/"/g,'').trim());
+  const recIdx = h.findIndex(x => x.includes('ﾚｺｰﾄﾞ') || x.includes('種別'));
+  const dIdx   = h.findIndex(x => x.includes('計上年月日'));
+  const nIdx   = h.findIndex(x => x.includes('得意先名'));
+  const sIdx   = h.findIndex(x => x.includes('商品名称'));
+  const qIdx   = h.findIndex(x => x.includes('数量'));
+  const pIdx   = h.findIndex(x => x.includes('単価'));
+  const aIdx   = h.findIndex(x => x.includes('金額'));
+  const fIdx   = h.findIndex(x => x.includes('符号'));
+  csvData = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(',').map(x => x.replace(/"/g,'').trim());
+    if (parseInt(c[recIdx]) !== 151) continue;
+    const suryo = parseFloat(c[qIdx]) || 0;
+    if (!suryo) continue;
+    csvData.push({date:c[dIdx]||'',name:c[nIdx]||'',shohin:c[sIdx]||'',
+      suryo, tanka:parseFloat(c[pIdx])||0, kingaku:parseFloat(c[aIdx])||0, fugo:parseInt(c[fIdx])||0});
+  }
+  if (!csvData.length) csvData = getDemoData();
+  showCSVResult(fileName, csvData);
+}
+
+function showCSVResult(fileName, data) {
+  document.getElementById('uploadFileName').textContent = fileName;
+  document.getElementById('uploadCount').textContent    = data.length;
+  document.getElementById('uploadDone').style.display   = 'flex';
+  const tbl = document.getElementById('previewTable');
+  tbl.innerHTML = `<thead><tr><th>日付</th><th>得意先名</th><th>品名</th><th>数量(L)</th><th>単価</th><th>金額</th></tr></thead>
+  <tbody>${data.slice(0,10).map(r => {
+    const y = YUSHU[r.shohin]||{l:r.shohin,c:'badge-regular'};
+    const d = r.date ? r.date.slice(4,6)+'/'+r.date.slice(6,8) : '';
+    return `<tr><td>${d}</td><td>${r.name}</td><td><span class="badge ${y.c}">${y.l}</span></td>
+      <td style="text-align:right">${r.suryo.toFixed(2)}</td>
+      <td style="text-align:right">¥${r.tanka.toLocaleString()}</td>
+      <td style="text-align:right">¥${r.kingaku.toLocaleString()}</td></tr>`;
+  }).join('')}</tbody>`;
+  document.getElementById('csvPreview').style.display = 'block';
+  document.getElementById('nextBtn1').disabled = false;
+}
+
+function buildFuribun() {
+  const rows = csvData.filter(r => r.name === '軽井沢町役場');
+  const tbody = document.getElementById('furibunBody');
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">050441の取引はありません</td></tr>';
+    document.getElementById('nextBtn2').disabled = false;
+    document.getElementById('furibunAlert').style.display = 'none';
+    return;
+  }
+  rows.forEach((row, idx) => {
+    const y = YUSHU[row.shohin]||{l:row.shohin,c:'badge-regular'};
+    const d = row.date ? row.date.slice(4,6)+'月'+row.date.slice(6,8)+'日' : '';
+    const opts = FURIBUN_OPTIONS.map(o => `<option value="${o}">${o||'-- 選択 --'}</option>`).join('');
+    const tr = document.createElement('tr');
+    tr.className = 'no-select'; tr.id = `fr${idx}`;
+    tr.innerHTML = `<td>${idx+1}</td><td>${d}</td><td><span class="badge ${y.c}">${y.l}</span></td>
+      <td style="text-align:right">${row.suryo.toFixed(2)}</td>
+      <td style="text-align:right">¥${row.tanka.toLocaleString()}</td>
+      <td style="text-align:right">¥${row.kingaku.toLocaleString()}</td>
+      <td><select onchange="selFuri(${idx},this.value)">${opts}</select></td>`;
+    tbody.appendChild(tr);
+  });
+  checkFuri();
+}
+
+function selFuri(idx, val) {
+  furibunSelections[idx] = val;
+  document.getElementById(`fr${idx}`).className = val ? 'selected' : 'no-select';
+  checkFuri();
+}
+
+function checkFuri() {
+  const n = csvData.filter(r => r.name === '軽井沢町役場').length;
+  const ok = Array.from({length:n},(_,i)=>i).every(i => furibunSelections[i]);
+  document.getElementById('nextBtn2').disabled = !ok;
+  document.getElementById('furibunAlert').style.display = ok ? 'none' : 'flex';
+}
+
+function generateInvoices() {
+  generatedInvoices = {};
+  csvData.forEach(row => {
+    if (row.name === '軽井沢町役場') return;
+    let dest = DEPT_MAP[row.name] || row.name;
+    const y = YUSHU[row.shohin]||{l:row.shohin,c:'badge-regular'};
+    const key = dest + '_' + y.l;
+    if (!generatedInvoices[key]) generatedInvoices[key] = {dest, yushu:y.l, cls:y.c, rows:[], total:0};
+    generatedInvoices[key].rows.push(row);
+    generatedInvoices[key].total += row.kingaku;
+  });
+  csvData.filter(r => r.name === '軽井沢町役場').forEach((row, idx) => {
+    const sel = furibunSelections[idx]; if (!sel) return;
+    const y = YUSHU[row.shohin]||{l:row.shohin,c:'badge-regular'};
+    const key = sel + '_振分';
+    if (!generatedInvoices[key]) generatedInvoices[key] = {dest:sel, yushu:y.l, cls:y.c, rows:[], total:0};
+    generatedInvoices[key].rows.push(row);
+    generatedInvoices[key].total += row.kingaku;
+  });
+  let p = 0;
+  const fill = document.getElementById('progressFill');
+  const pct  = document.getElementById('progressPct');
+  const iv = setInterval(() => {
+    p = Math.min(p + 10, 100);
+    fill.style.width = p + '%'; pct.textContent = p + '%';
+    if (p >= 100) { clearInterval(iv); document.getElementById('progressWrap').style.display='none'; renderCards(); renderStats(); }
+  }, 60);
+}
+
+function renderStats() {
+  const keys = Object.keys(generatedInvoices);
+  const tot  = keys.reduce((s,k)=>s+generatedInvoices[k].total,0);
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-card"><div class="stat-label">生成シート数</div><div class="stat-value">${keys.length}</div></div>
+    <div class="stat-card" style="border-left-color:var(--accent)"><div class="stat-label">合計請求額</div><div class="stat-value" style="font-size:16px">¥${tot.toLocaleString()}</div></div>
+    <div class="stat-card" style="border-left-color:var(--success)"><div class="stat-label">明細行数</div><div class="stat-value">${keys.reduce((s,k)=>s+generatedInvoices[k].rows.length,0)}</div></div>
+    <div class="stat-card" style="border-left-color:#9b59b6"><div class="stat-label">振り分け件数</div><div class="stat-value">${Object.keys(furibunSelections).length}</div></div>`;
+  document.getElementById('finalCount').textContent = keys.length;
+  document.getElementById('finalTotal').textContent = '¥'+tot.toLocaleString();
+  document.getElementById('finalDate').textContent  = new Date().toLocaleDateString('ja-JP');
+}
+
+function renderCards() {
+  document.getElementById('resultCards').innerHTML = Object.entries(generatedInvoices).map(([,inv]) => {
+    const tax = Math.floor(inv.total * 1.1);
+    return `<div class="result-card">
+      <div class="result-card-header"><span>${inv.dest}</span><span class="badge ${inv.cls}" style="font-size:10px">${inv.yushu}</span></div>
+      <div class="result-card-body">
+        <div class="result-row"><span class="result-label">明細件数</span><span class="result-value">${inv.rows.length} 件</span></div>
+        <div class="result-row"><span class="result-label">小計（税抜）</span><span class="result-value">¥${inv.total.toLocaleString()}</span></div>
+        <div class="result-row"><span class="result-label">消費税（10%）</span><span class="result-value">¥${Math.floor(inv.total*.1).toLocaleString()}</span></div>
+        <div class="result-total">¥${tax.toLocaleString()}</div>
+      </div></div>`;
+  }).join('');
+}
+
+function goStep(n) {
+  for (let i=1;i<=4;i++) {
+    document.getElementById(`panel${i}`).classList.toggle('active', i===n);
+    const s = document.getElementById(`step${i}`);
+    s.classList.remove('active','done');
+    if (i<n) s.classList.add('done');
+    if (i===n) s.classList.add('active');
+    if (i<4) document.getElementById(`line${i}`).classList.toggle('done', i<n);
+  }
+  if (n===2) buildFuribun();
+  if (n===3) generateInvoices();
+}
+
+function resetAll() {
+  csvData=[]; furibunSelections={}; generatedInvoices={};
+  document.getElementById('csvFile').value='';
+  document.getElementById('uploadDone').style.display='none';
+  document.getElementById('csvPreview').style.display='none';
+  document.getElementById('nextBtn1').disabled=true;
+  document.getElementById('progressWrap').style.display='block';
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('progressPct').textContent='0%';
+  goStep(1);
+}
+
+// ドラッグ&ドロップ
+const ua = document.getElementById('uploadArea');
+ua.addEventListener('dragover',e=>{e.preventDefault();ua.classList.add('dragover');});
+ua.addEventListener('dragleave',()=>ua.classList.remove('dragover'));
+ua.addEventListener('drop',e=>{
+  e.preventDefault(); ua.classList.remove('dragover');
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=ev=>{try{parseCSV(new TextDecoder('shift-jis').decode(ev.target.result),f.name);}catch(e){parseCSV(ev.target.result,f.name);}};
+  r.readAsArrayBuffer(f);
+});
+
+// ══════════ TAB2：PDF生成 ══════════
+let meisaiData = [];
+
+function initPDFTab() {
+  if (meisaiData.length) return;
+  meisaiData = [
+    {date:'5月1日', hinmei:'レギュラーガソリン', suryo:152, tanka:159},
+    {date:'5月9日', hinmei:'レギュラーガソリン', suryo:15,  tanka:159},
+    {date:'5月18日',hinmei:'レギュラーガソリン', suryo:217, tanka:159},
+    {date:'5月24日',hinmei:'レギュラーガソリン', suryo:181, tanka:159},
+    {date:'5月30日',hinmei:'レギュラーガソリン', suryo:153, tanka:159},
+  ];
+  const today = new Date();
+  const inv   = new Date(today.getFullYear(), today.getMonth()+1, 7);
+  const cut   = new Date(today.getFullYear(), today.getMonth()+1, 0);
+  document.getElementById('invoiceDate').value = inv.toISOString().split('T')[0];
+  document.getElementById('cutDate').value     = cut.toISOString().split('T')[0];
+  renderMeisai();
+  updatePreview();
+}
+
+function renderMeisai() {
+  document.getElementById('meisaiBody').innerHTML = meisaiData.map((r,i) => `
+    <tr>
+      <td><input type="text"   value="${r.date}"   onchange="meisaiData[${i}].date=this.value;updatePreview()"></td>
+      <td><input type="text"   value="${r.hinmei}" onchange="meisaiData[${i}].hinmei=this.value;updatePreview()"></td>
+      <td><input type="number" value="${r.suryo}"  onchange="meisaiData[${i}].suryo=parseFloat(this.value)||0;updatePreview()"></td>
+      <td><input type="number" value="${r.tanka}"  onchange="meisaiData[${i}].tanka=parseFloat(this.value)||0;updatePreview()"></td>
+    </tr>`).join('');
+}
+
+function addMeisai() {
+  meisaiData.push({date:'',hinmei:'レギュラーガソリン',suryo:0,tanka:159});
+  renderMeisai(); updatePreview();
+}
+
+function calcTotals() {
+  const subtotal = meisaiData.reduce((s,r) => s+Math.floor(r.suryo*r.tanka), 0);
+  const tax = Math.floor(subtotal * 0.1);
+  return {subtotal, tax, total: subtotal+tax};
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(s); if (isNaN(d)) return s;
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+function updatePreview() {
+  const dest = document.getElementById('destName').value || '（宛先未入力）';
+  const kei  = document.getElementById('keisho').value;
+  const iDate= fmtDate(document.getElementById('invoiceDate').value);
+  const cDate= fmtDate(document.getElementById('cutDate').value);
+  const {subtotal, tax, total} = calcTotals();
+  const rows = meisaiData.map(r => {
+    const k = Math.floor(r.suryo*r.tanka);
+    return `<tr><td class="td-center">${r.date}</td><td>${r.hinmei}</td>
+      <td class="td-right">${r.suryo.toFixed(2)}</td>
+      <td class="td-right">¥${r.tanka.toLocaleString()}</td>
+      <td class="td-right">¥${k.toLocaleString()}</td></tr>`;
+  }).join('');
+  const empty = Array(Math.max(0,8-meisaiData.length)).fill(
+    '<tr><td class="td-center">&nbsp;</td><td></td><td></td><td></td><td></td></tr>').join('');
+  document.getElementById('invoicePreview').innerHTML = `
+    <div class="inv-stamp">相馬商事<br>株式会社</div>
+    <div class="inv-title">請　求　書</div>
+    <div class="inv-date-row">${iDate}</div>
+    <div class="inv-to-from">
+      <div><div class="inv-to">${dest}　${kei}</div><div class="inv-to-sub">締切日：${cDate}<br>セールス：0018</div></div>
+      <div class="inv-from">〒389-0111　北佐久郡軽井沢町中軽井沢2415-1<br>相馬商事株式会社<br>セルフ中軽井沢SS<br>TEL 0267-45-6276<br>登録番号：T3100001007295</div>
+    </div>
+    <div class="inv-amount-box">
+      <div class="inv-amount-label">税込合計金額</div>
+      <div class="inv-amount-value">¥${total.toLocaleString()}</div>
+      <div class="inv-tax-info">消費税率：10%<br>消費税額：¥${tax.toLocaleString()}<br>税抜金額：¥${subtotal.toLocaleString()}</div>
+    </div>
+    <div class="inv-message">毎度お引立てにあずかり誠にありがとうございます。下記のとおりご請求申し上げます。</div>
+    <table class="inv-table">
+      <thead><tr><th style="width:58px">納品月日</th><th>品　　名</th><th style="width:52px">数　量</th><th style="width:52px">単　価</th><th style="width:66px">金　額</th></tr></thead>
+      <tbody>${rows}${empty}
+        <tr class="subtotal-row"><td colspan="4" class="td-right">小　計</td><td class="td-right">¥${subtotal.toLocaleString()}</td></tr>
+        <tr class="subtotal-row"><td colspan="4" class="td-right">消費税（10%）</td><td class="td-right">¥${tax.toLocaleString()}</td></tr>
+        <tr class="total-row"><td colspan="4" class="td-right">合　計</td><td class="td-right">¥${total.toLocaleString()}</td></tr>
+      </tbody>
+    </table>
+    <div class="inv-bank">お振込先：八十二長野銀行　中軽井沢支店　普通口座 73801</div>
+    <div class="inv-note">※消費税10%対象　すでにお支払済でも締切日以後にご入金のものは含まれておりませんのでご了承下さい。</div>`;
+}
+
+function generatePDF() {
+  const dest  = document.getElementById('destName').value || '請求先';
+  const kei   = document.getElementById('keisho').value;
+  const iDate = fmtDate(document.getElementById('invoiceDate').value);
+  const cDate = fmtDate(document.getElementById('cutDate').value);
+  const {subtotal, tax, total} = calcTotals();
+  const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const ml=18, mr=18, mt=18, cW=210-ml-mr;
+
+  doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text('Invoice', 105, mt+8, {align:'center'});
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text(iDate, 210-mr, mt+8, {align:'right'});
+
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text(dest+'  '+kei, ml, mt+20);
+  doc.line(ml, mt+22, ml+88, mt+22);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text('Closing: '+cDate+'  Sales: 0018', ml, mt+28);
+
+  ['389-0111 Nakakaruizawa, Karuizawa, Nagano','Soma Shoji Co., Ltd.',
+   'Self Nakakaruizawa SS','TEL: 0267-45-6276','T3100001007295'].forEach((l,i)=>{
+    doc.text(l, 210-mr, mt+16+i*5, {align:'right'});
+  });
+
+  const bY=mt+38;
+  doc.setFillColor(240,246,252); doc.roundedRect(ml,bY,cW,13,2,2,'F');
+  doc.setDrawColor(26,58,92); doc.setLineWidth(.5); doc.roundedRect(ml,bY,cW,13,2,2,'S');
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text('Total Amount (incl. tax)', ml+3, bY+8.5);
+  doc.setFontSize(16); doc.setTextColor(26,58,92);
+  doc.text('JPY '+total.toLocaleString(), ml+72, bY+8.5);
+  doc.setTextColor(0,0,0); doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('Tax 10%: JPY '+tax.toLocaleString(), 210-mr-3, bY+5.5, {align:'right'});
+  doc.text('Subtotal: JPY '+subtotal.toLocaleString(), 210-mr-3, bY+10.5, {align:'right'});
+
+  const tY=bY+19, cols=[22,67,22,22,27], colX=[ml];
+  cols.forEach((w,i)=>colX.push(colX[i]+w));
+  const rH=7;
+  doc.setFillColor(26,58,92); doc.rect(ml,tY,cW,rH,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
+  ['Date','Description','Qty(L)','Price','Amount'].forEach((h,i)=>{
+    doc.text(h, colX[i]+cols[i]/2, tY+5, {align:'center'});
+  });
+  doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+
+  const maxR=20;
+  for(let i=0;i<maxR;i++){
+    const y=tY+rH+i*rH;
+    if(i%2===0){doc.setFillColor(248,251,255);doc.rect(ml,y,cW,rH,'F');}
+    if(i<meisaiData.length){
+      const r=meisaiData[i], k=Math.floor(r.suryo*r.tanka);
+      doc.text(r.date,              colX[0]+1,          y+5);
+      doc.text(r.hinmei,            colX[1]+1,          y+5);
+      doc.text(r.suryo.toFixed(2),  colX[2]+cols[2]-1,  y+5, {align:'right'});
+      doc.text(r.tanka.toLocaleString(), colX[3]+cols[3]-1, y+5, {align:'right'});
+      doc.text(k.toLocaleString(),  colX[4]+cols[4]-1,  y+5, {align:'right'});
+    }
+    doc.setDrawColor(200,212,224); doc.setLineWidth(.2);
+    doc.line(ml, y+rH, ml+cW, y+rH);
+  }
+  colX.forEach(x=>doc.line(x,tY,x,tY+rH*(maxR+1)));
+  doc.line(ml+cW,tY,ml+cW,tY+rH*(maxR+1));
+
+  const sY=tY+rH*(maxR+1);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  doc.setFillColor(230,240,252); doc.rect(ml,sY,cW,rH,'F');
+  doc.text('Subtotal', colX[3]+cols[3]-1, sY+5, {align:'right'});
+  doc.text('JPY '+subtotal.toLocaleString(), colX[4]+cols[4]-1, sY+5, {align:'right'});
+  doc.rect(ml,sY+rH,cW,rH,'F');
+  doc.text('Tax 10%', colX[3]+cols[3]-1, sY+rH+5, {align:'right'});
+  doc.text('JPY '+tax.toLocaleString(), colX[4]+cols[4]-1, sY+rH+5, {align:'right'});
+  doc.setFillColor(210,228,248); doc.rect(ml,sY+rH*2,cW,rH+1,'F');
+  doc.setFontSize(10);
+  doc.text('TOTAL', colX[3]+cols[3]-1, sY+rH*2+6, {align:'right'});
+  doc.text('JPY '+total.toLocaleString(), colX[4]+cols[4]-1, sY+rH*2+6, {align:'right'});
+
+  const bkY=sY+rH*3+5;
+  doc.setFillColor(248,248,248); doc.roundedRect(ml,bkY,cW,8,1,1,'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('Bank: Hachijuni Nagano Bank  Nakakaruizawa Branch  Ordinary 73801', ml+3, bkY+5.5);
+  doc.setFontSize(7); doc.setTextColor(130,130,130);
+  doc.text('* Incl. 10% consumption tax  /  Closing: '+cDate, ml, bkY+13);
+
+  const fn='Invoice_'+dest+'_'+iDate.replace(/年|月/g,'-').replace('日','')+'.pdf';
+  doc.save(fn);
+  const al=document.getElementById('alertDl');
+  al.style.display='block'; setTimeout(()=>al.style.display='none',3000);
+}
+</script>
+</body>
+</html>
