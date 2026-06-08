@@ -325,8 +325,11 @@ select option{background:#1a1d27}
     </div>
   </div>
 
-  <!-- 個別プレビュー -->
-  <div id="pdfPreviewArea"></div>
+  <!-- 個別ダウンロード -->
+  <div class="card" id="individualPdfCard" style="display:none">
+    <div class="card-title"><span class="icon">📄</span>個別ダウンロード</div>
+    <div id="individualPdfList" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
 </div>
 
 <!-- ===== マスター管理 ===== -->
@@ -360,6 +363,31 @@ select option{background:#1a1d27}
         <input id="newMasterKey" type="text" placeholder="プルダウン選択値" style="flex:1;min-width:150px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
         <input id="newMasterVal" type="text" placeholder="請求書の宛名" style="flex:2;min-width:200px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
         <button class="btn btn-primary" onclick="addMasterRow()">＋ 追加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">⛽</span>特殊油種単価（単価ファイルにない油種）</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+      2サイクルスピードオイルなど、単価ファイルに掲載されていない油種の単価をここで管理します。<br>
+      <strong style="color:#fcd34d">「軽油税（1Lあたり）」</strong>は軽油請求書の2行目（軽油税行）の単価です。現在は15円ですが、変更時はここを編集してください。<br>
+      単価変更時は編集後に「設定を保存」ボタンを押してください。
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:45%">油種名</th><th style="width:35%">単価（円）</th><th>操作</th></tr></thead>
+        <tbody id="specialTankaTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">新規追加</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="newSpecialKey" type="text" placeholder="油種名（例：2サイクルスピードオイル）"
+          style="flex:2;min-width:180px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <input id="newSpecialVal" type="number" placeholder="単価（円）"
+          style="flex:1;min-width:100px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+        <button class="btn btn-primary" onclick="addSpecialTankaRow()">＋ 追加</button>
       </div>
     </div>
   </div>
@@ -617,8 +645,17 @@ function formatDate(s){
 }
 
 function convertYushu(kana){
-  const map={'ﾚｷﾞﾕﾗ-ｶﾞｿﾘﾝ':'レギュラーガソリン','ENEOSﾊｲｵｸ':'ENEOSハイオク','ｹｲﾕ':'軽油','ﾄｳﾕ':'灯油','ﾊｲﾀﾂﾄｳﾕ':'配達灯油'};
-  return map[kana]||kana;
+  const map={
+    'ﾚｷﾞﾕﾗ-ｶﾞｿﾘﾝ':'レギュラーガソリン',
+    'ENEOSﾊｲｵｸ':'ENEOSハイオク',
+    'ｹｲﾕ':'軽油',
+    'ﾄｳﾕ':'灯油',
+    'ﾊｲﾀﾂﾄｳﾕ':'配達灯油',
+  };
+  if(map[kana]) return map[kana];
+  // 2サイクル系（カナ表記ゆれ対応）
+  if(kana.includes('2ｻｲｸﾙ') || kana.includes('2サイクル')) return '2サイクルスピードオイル';
+  return kana;
 }
 
 function convertTName(n){
@@ -687,7 +724,7 @@ function loadTanka(file){
             hioak: Math.round(b8_h + diff_h),
             regular: Math.round(b8_r + diff_r),
             keiyu_tax: Math.round(b8_k + diff_k),
-            keiyu_body: Math.round(b8_k + diff_k - 15),
+            keiyu_body: Math.round(b8_k + diff_k - getKeiyuZei()),
             toyu: Math.round(b8_t + diff_t),
             haitatsu: Math.round(b8_p + diff_p),
             source: sheets[bestIdx]
@@ -776,6 +813,12 @@ function yushuTag(y){
 // ================================================================
 // マスターデータ（localStorage対応）
 // ================================================================
+// 特殊油種単価（単価ファイルにない油種・変更可能な税額）
+const DEFAULT_SPECIAL_TANKA = {
+  '2サイクルスピードオイル': 1100,
+  '軽油税（1Lあたり）': 15,
+};
+
 const DEFAULT_FURIBUN = [
   'こども教育課　中保育園(携行缶)','こども教育課　保育園','こども教育課　保育園軽油',
   'こども教育課子育て支援センター','こども教育課児童館','こども教育課児童係',
@@ -824,16 +867,19 @@ function loadMasterData(){
     const f = localStorage.getItem('furibunOptions');
     const m = localStorage.getItem('masterMap');
     const c = localStorage.getItem('convertMap');
+    const s = localStorage.getItem('specialTanka');
     return {
       furibunOptions: f ? JSON.parse(f) : [...DEFAULT_FURIBUN],
       masterMap: m ? JSON.parse(m) : {...DEFAULT_MASTER},
       convertMap: c ? JSON.parse(c) : {...DEFAULT_CONVERT},
+      specialTanka: s ? JSON.parse(s) : {...DEFAULT_SPECIAL_TANKA},
     };
   } catch(e) {
     return {
       furibunOptions: [...DEFAULT_FURIBUN],
       masterMap: {...DEFAULT_MASTER},
       convertMap: {...DEFAULT_CONVERT},
+      specialTanka: {...DEFAULT_SPECIAL_TANKA},
     };
   }
 }
@@ -843,6 +889,12 @@ let masterData = loadMasterData();
 function getFuribunOptions(){ return masterData.furibunOptions; }
 function getMasterMap(){ return masterData.masterMap; }
 function getConvertMap(){ return masterData.convertMap; }
+function getSpecialTanka(){ return masterData.specialTanka; }
+function getKeiyuZei(){
+  // 軽油税をマスターから取得（なければ15円）
+  const st = getSpecialTanka();
+  return st['軽油税（1Lあたり）'] || 15;
+}
 
 // ================================================================
 // マスター管理画面
@@ -873,6 +925,22 @@ function renderMaster(){
       </td>
       <td>
         <button onclick="deleteMasterRow('${k}')" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:11px">削除</button>
+      </td>
+    </tr>
+  `).join('');
+
+  // 特殊油種単価
+  const st = getSpecialTanka();
+  document.getElementById('specialTankaTbody').innerHTML = Object.entries(st).map(([k,v])=>`
+    <tr>
+      <td style="font-size:12px">${k}</td>
+      <td>
+        <input type="number" value="${v}" data-key="${k}"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px"
+          onchange="updateSpecialTanka(this)">
+      </td>
+      <td>
+        <button onclick="deleteSpecialTanka('${k}')" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:11px">削除</button>
       </td>
     </tr>
   `).join('');
@@ -910,6 +978,29 @@ function deleteFuribunOption(idx){
   if(PROTECTED.includes(opt)){ alert('この選択肢は削除できません'); return; }
   if(!confirm(`「${opt}」を削除しますか？`)){ return; }
   masterData.furibunOptions.splice(idx, 1);
+  renderMaster();
+}
+
+function addSpecialTankaRow(){
+  const k = document.getElementById('newSpecialKey').value.trim();
+  const v = parseInt(document.getElementById('newSpecialVal').value);
+  if(!k){ alert('油種名を入力してください'); return; }
+  if(isNaN(v)||v<=0){ alert('単価を正しく入力してください'); return; }
+  masterData.specialTanka[k] = v;
+  document.getElementById('newSpecialKey').value='';
+  document.getElementById('newSpecialVal').value='';
+  renderMaster();
+}
+
+function updateSpecialTanka(input){
+  const k = input.dataset.key;
+  const v = parseInt(input.value);
+  if(!isNaN(v) && v>0) masterData.specialTanka[k] = v;
+}
+
+function deleteSpecialTanka(k){
+  if(!confirm(`「${k}」を削除しますか？`)){ return; }
+  delete masterData.specialTanka[k];
   renderMaster();
 }
 
@@ -960,6 +1051,7 @@ function saveMaster(){
     localStorage.setItem('furibunOptions', JSON.stringify(masterData.furibunOptions));
     localStorage.setItem('masterMap', JSON.stringify(masterData.masterMap));
     localStorage.setItem('convertMap', JSON.stringify(masterData.convertMap));
+    localStorage.setItem('specialTanka', JSON.stringify(masterData.specialTanka));
     const b = document.getElementById('masterSavedBanner');
     b.style.display='flex';
     setTimeout(()=>b.style.display='none', 3000);
@@ -973,6 +1065,7 @@ function resetMaster(){
   localStorage.removeItem('furibunOptions');
   localStorage.removeItem('masterMap');
   localStorage.removeItem('convertMap');
+  localStorage.removeItem('specialTanka');
   masterData = loadMasterData();
   renderMaster();
 }
@@ -1010,8 +1103,21 @@ function buildFuribunTable(){
 }
 
 function getTanka(yushu){
-  const map={'レギュラーガソリン':tanka.regular,'ENEOSハイオク':tanka.hioak,'軽油':tanka.keiyu_tax,'灯油':tanka.toyu,'配達灯油':tanka.haitatsu};
-  return map[yushu]||0;
+  const keiyuZei = getKeiyuZei();
+  // 通常油種
+  const map={
+    'レギュラーガソリン': tanka.regular,
+    'ENEOSハイオク': tanka.hioak,
+    '軽油': tanka.keiyu_tax,           // 税込（本体+軽油税）
+    '軽油本体': tanka.keiyu_tax - keiyuZei, // 本体のみ（消費税計算用）
+    '灯油': tanka.toyu,
+    '配達灯油': tanka.haitatsu,
+  };
+  if(map[yushu] !== undefined) return map[yushu];
+  // 特殊油種（マスター管理）
+  const special = getSpecialTanka();
+  if(special[yushu] !== undefined) return special[yushu];
+  return 0;
 }
 
 function checkFuribun(){
@@ -1220,6 +1326,28 @@ function renderStep3(){
     <div class="status-item"><div class="label">請求日</div><div class="value" style="font-size:14px">${invoiceDate}</div></div>
     <div class="status-item warn"><div class="label">適用単価</div><div class="value" style="font-size:12px">${tanka.source}</div></div>
   `;
+
+  // 個別ダウンロードリスト生成
+  const card = document.getElementById('individualPdfCard');
+  const list = document.getElementById('individualPdfList');
+  if(Object.keys(invoices).length > 0){
+    card.style.display = 'block';
+    list.innerHTML = Object.entries(invoices).map(([key,inv])=>{
+      const t = getTanka(inv.yushu);
+      const sub = inv.rows.reduce((s,r)=>s+Math.floor(r.suryo*t),0);
+      const total = sub + Math.floor(sub*0.1);
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700">${inv.name}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">${yushuTag(inv.yushu)} ${inv.rows.length}件 　税込 ¥${total.toLocaleString()}</div>
+          </div>
+          <button class="btn btn-success" style="font-size:12px;padding:6px 14px"
+            onclick="generateSinglePDF('${key}')">📄 PDF</button>
+        </div>
+      `;
+    }).join('');
+  }
 }
 
 function renderInvoiceDetail(inv, key){
@@ -1286,8 +1414,505 @@ function loadDemo(){
 // ================================================================
 // PDF生成（簡易版）
 // ================================================================
-function generateAllPDF(){
-  alert(`【PDF生成】\n合計${Object.keys(invoices).length}件の請求書を出力します。\n請求日：${invoiceDate}\n\n※ 本格的なPDF生成はClaude AIによる次の開発フェーズで実装予定です。\n現時点ではデータ確認・振り分け機能が完成しています。`);
+// ================================================================
+// PDF生成（jsPDF + Noto Sans JP）
+// ================================================================
+
+async function generateSinglePDF(key){
+  const inv = invoices[key];
+  if(!inv){ alert('請求書データが見つかりません'); return; }
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await generateInvoicePDF(inv, key);
+  } catch(e){
+    console.error(e);
+    alert('PDF生成エラー: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '📄 PDF';
+}
+
+// ================================================================
+// 請求書PDF生成メイン
+// ================================================================
+async function generateAllPDF(){
+  const keys = Object.keys(invoices);
+  if(keys.length === 0){ alert('請求書データがありません。先にCSV処理・振り分けを完了してください。'); return; }
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+
+  try {
+    let generated = 0;
+    for(const key of keys){
+      const inv = invoices[key];
+      await generateInvoicePDF(inv, key);
+      generated++;
+      btn.textContent = `⏳ ${generated}/${keys.length} 生成中...`;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    btn.textContent = `✅ ${generated}件 完了`;
+    btn.disabled = false;
+  } catch(e){
+    console.error(e);
+    alert('PDF生成中にエラーが発生しました: ' + e.message);
+    btn.textContent = '🖨️ PDF一括出力';
+    btn.disabled = false;
+  }
+}
+
+async function generateInvoicePDF(inv, key){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+
+  // フォント設定（内蔵Helveticaで代替、日本語は後述）
+  doc.setFont('helvetica');
+
+  switch(inv.type){
+    case 'normal':
+      buildStandardPDF(doc, inv, key); break;
+    case 'ogahoal':
+      buildOgaPDF(doc, inv, key); break;
+    case 'furikosha':
+      buildFurikoshaPDF(doc, inv, key); break;
+    case 'shakaifuku':
+      buildShakaifukuPDF(doc, inv, key); break;
+    default:
+      buildStandardPDF(doc, inv, key);
+  }
+
+  // ファイル名生成
+  const fname = sanitizeFilename(`${inv.name}_${inv.yushu}_${invoiceDate}.pdf`);
+  doc.save(fname);
+}
+
+function sanitizeFilename(s){
+  return s.replace(/[\/\\:*?"<>|]/g,'_').replace(/\s+/g,'_');
+}
+
+// ================================================================
+// 役場標準書式PDF（レギュラー・ハイオク・灯油・配達灯油・2サイクル）
+// ================================================================
+function buildStandardPDF(doc, inv, key){
+  const keiyuZei = getKeiyuZei();
+  const isKeiyu = inv.yushu === '軽油';
+  const W = 210, H = 297;
+  const L = 15, R = 195; // 左右マージン
+
+  // ===== ヘッダー =====
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  centerText(doc, '請 求 （ 納 品 ） 書', W/2, 20);
+
+  // 右上：枚数
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.text('　枚の内　　　枚', 155, 20);
+
+  // 注意書き
+  doc.setFontSize(7.5);
+  doc.text('※合計金額は支払伝票金額と一致すること', L, 27);
+  doc.text('※合計枚数・金額は担当課で内容確認後１枚目のみ記入のこと', 75, 27);
+
+  // ===== 明細テーブルヘッダー =====
+  const tableTop = 30;
+  const cols = isKeiyu
+    ? [L, 42, 85, 120, 145, 170, R]   // 軽油：納品月日・品名・規格・単価・数量・金額
+    : [L, 42, 85, 120, 145, 170, R];  // 共通
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica','bold');
+  drawTableHeader(doc, tableTop, cols, ['納品月日','品　名','規　格','単　価','数　量','金　額']);
+
+  // ===== 明細行 =====
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  let y = tableTop + 7;
+  const rowH = isKeiyu ? 5.5 : 5.5;
+  let subtotal = 0;
+
+  inv.rows.forEach(r => {
+    const t = isKeiyu ? (getTanka('軽油本体') || tanka.keiyu_tax - keiyuZei) : getTanka(inv.yushu);
+    const amt = Math.floor(r.suryo * t);
+    subtotal += amt;
+
+    if(isKeiyu){
+      // 軽油：2行1組
+      doc.text(r.dateStr, cols[0]+1, y+4);
+      doc.text('軽油', cols[1]+1, y+4);
+      doc.text('', cols[2]+1, y+4);
+      doc.text(String(t), cols[3]+1, y+4);
+      doc.text(String(r.suryo), cols[4]+1, y+4);
+      doc.text(fmtNum(amt), cols[5]+1, y+4);
+      // 罫線
+      drawRowLine(doc, y, y+rowH, cols);
+      y += rowH;
+
+      // 軽油税行
+      const taxAmt = Math.floor(r.suryo * keiyuZei);
+      doc.text('', cols[0]+1, y+4);
+      doc.text('軽油税', cols[1]+1, y+4);
+      doc.text('', cols[2]+1, y+4);
+      doc.text(String(keiyuZei), cols[3]+1, y+4);
+      doc.text(String(r.suryo), cols[4]+1, y+4);
+      doc.text(fmtNum(taxAmt), cols[5]+1, y+4);
+      drawRowLine(doc, y, y+rowH, cols);
+      y += rowH;
+      subtotal += taxAmt; // 軽油税は小計に含める（消費税計算では別処理）
+    } else {
+      doc.text(r.dateStr, cols[0]+1, y+4);
+      doc.text(inv.yushu, cols[1]+1, y+4);
+      doc.text('', cols[2]+1, y+4);
+      doc.text(String(t), cols[3]+1, y+4);
+      doc.text(String(r.suryo), cols[4]+1, y+4);
+      doc.text(fmtNum(amt), cols[5]+1, y+4);
+      drawRowLine(doc, y, y+rowH, cols);
+      y += rowH;
+    }
+  });
+
+  // 空行（25行まで埋める）
+  const usedRows = isKeiyu ? inv.rows.length * 2 : inv.rows.length;
+  const maxRows = 22;
+  for(let i = usedRows; i < maxRows; i++){
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  }
+
+  // ===== 小計・消費税・計 =====
+  const tax = isKeiyu
+    ? Math.floor(inv.rows.reduce((s,r)=>s+Math.floor(r.suryo*(getTanka('軽油本体')||tanka.keiyu_tax-keiyuZei)),0) * 0.1)
+    : Math.floor(subtotal * 0.1);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8.5);
+
+  // 小計行
+  doc.text('小　計', cols[0]+1, y+4);
+  doc.text(fmtNum(subtotal), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols);
+  y += rowH;
+
+  // 消費税行
+  doc.setFont('helvetica','normal');
+  doc.text('消費税　10%', cols[0]+1, y+4);
+  doc.text(fmtNum(tax), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols);
+  y += rowH;
+
+  // 計行
+  doc.setFont('helvetica','bold');
+  const total = subtotal + tax;
+  doc.text('計', cols[0]+1, y+4);
+  doc.text(fmtNum(total), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols);
+  y += rowH + 4;
+
+  // ===== 役場記載欄 =====
+  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');
+  doc.text('※役場記載欄（この欄は記入しないで下さい。）', L, y);
+  y += 5;
+  doc.rect(L, y, R-L, 18);
+  doc.text('合計　　　　　金額', L+2, y+5);
+  doc.text('　　　　　枚　（うち消費税　　　　　　　　　　　　　　円）', L+2, y+12);
+  y += 22;
+
+  // ===== 宛先・請求者情報 =====
+  doc.setFontSize(10);
+  doc.setFont('helvetica','bold');
+  doc.text('軽井沢町長　　殿', L, y+6);
+  doc.setFontSize(9);
+  doc.text('（納品先）　' + inv.name, L, y+14);
+
+  // 右側：請求者情報
+  const rx = 110;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  doc.text('住　　所　長野県佐久市大字野沢１番地', rx, y+3);
+  doc.text('社　　名　相馬商事株式会社', rx, y+10);
+  doc.text('上記のとおり請求（納品）いたします。', rx, y+17);
+  doc.text('代表者名　代表取締役社長　相馬　美穂', rx, y+24);
+  y += 28;
+
+  // 請求日
+  doc.setFontSize(9);
+  doc.text(invoiceDate, L+5, y+6);
+
+  // 振込先
+  doc.text('振 込 先　八十二長野銀行　中軽井沢支店　普　７３８０１', rx, y+4);
+  doc.text('フリガナ　ソウマショウジカブシキガイシャ', rx, y+10);
+  doc.text('口座名義　相馬商事株式会社', rx, y+16);
+  doc.text('登録番号：T3100001007295', rx, y+22);
+
+  // 外枠
+  doc.setLineWidth(0.5);
+  doc.rect(L-2, 15, R-L+4, H-25);
+}
+
+// ================================================================
+// 大賀ホールPDF
+// ================================================================
+function buildOgaPDF(doc, inv, key){
+  const W = 210;
+  const L = 15, R = 195;
+  const t = getTanka(inv.yushu);
+
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  centerText(doc, '請 求 書', W/2, 20);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text('財団法人', L, 32);
+  doc.text('軽井沢大賀ホール　御中', L, 39);
+  doc.text('下記のとおりご請求申し上げます。', L, 50);
+
+  // 請求日
+  doc.text(invoiceDate, R-40, 32);
+
+  // 合計金額
+  const subtotal = inv.rows.reduce((s,r)=>s+Math.floor(r.suryo*t),0);
+  const tax = Math.floor(subtotal*0.1);
+  const total = subtotal+tax;
+  doc.setFontSize(12);
+  doc.setFont('helvetica','bold');
+  doc.text('税込合計金額　￥' + fmtNum(total), L, 60);
+  doc.setLineWidth(0.5);
+  doc.line(L, 62, R, 62);
+
+  // 明細テーブル
+  const cols = [L, 45, 100, 140, 170, R];
+  doc.setFontSize(9);
+  drawTableHeader(doc, 68, cols, ['納品月日','品　名','数　量','単　価','金　額']);
+
+  let y = 75;
+  const rowH = 6;
+  doc.setFont('helvetica','normal');
+  inv.rows.forEach(r=>{
+    const amt = Math.floor(r.suryo*t);
+    doc.text(r.dateStr, cols[0]+1, y+4);
+    doc.text(inv.yushu, cols[1]+1, y+4);
+    doc.text(String(r.suryo), cols[2]+1, y+4);
+    doc.text(String(t), cols[3]+1, y+4);
+    doc.text(fmtNum(amt), cols[4]+1, y+4);
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  });
+
+  // 空行
+  for(let i=inv.rows.length;i<9;i++){
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  }
+
+  // 小計・消費税・合計
+  doc.setFont('helvetica','bold');
+  doc.text('小計', cols[0]+1, y+4);
+  doc.text(fmtNum(subtotal), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','normal');
+  doc.text('消費税10%', cols[0]+1, y+4);
+  doc.text(fmtNum(tax), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','bold');
+  doc.text('合計（税込）', cols[0]+1, y+4);
+  doc.text(fmtNum(total), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH+10;
+
+  // 振込先
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('八十二長野銀行　中軽井沢支店　普通　７３８０１', L, y);
+  doc.text('相馬商事株式会社', L, y+7);
+  doc.text('登録番号：T3100001007295', L, y+14);
+}
+
+// ================================================================
+// 振興公社PDF
+// ================================================================
+function buildFurikoshaPDF(doc, inv, key){
+  const W = 210;
+  const L = 15, R = 195;
+  const t = getTanka(inv.yushu);
+
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  centerText(doc, '請 求 書', W/2, 20);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text('軽井沢町', L, 32);
+  doc.text('振興公社　御中', L, 39);
+  doc.text('下記のとおりご請求申し上げます。', L, 50);
+  doc.text(invoiceDate, R-40, 32);
+
+  const subtotal = inv.rows.reduce((s,r)=>s+Math.floor(r.suryo*t),0);
+  const tax = Math.floor(subtotal*0.1);
+  const total = subtotal+tax;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica','bold');
+  doc.text('税込合計金額　￥' + fmtNum(total), L, 60);
+  doc.line(L, 62, R, 62);
+
+  // 明細
+  const cols = [L, 45, 90, 130, 160, R];
+  doc.setFontSize(9);
+  drawTableHeader(doc, 68, cols, ['納品月日','品　名','数　量','単　価','金　額']);
+
+  let y = 75;
+  const rowH = 6;
+  doc.setFont('helvetica','normal');
+  inv.rows.forEach(r=>{
+    const amt = Math.floor(r.suryo*t);
+    doc.text(r.dateStr, cols[0]+1, y+4);
+    doc.text(inv.yushu, cols[1]+1, y+4);
+    doc.text(String(r.suryo), cols[2]+1, y+4);
+    doc.text(String(t), cols[3]+1, y+4);
+    doc.text(fmtNum(amt), cols[4]+1, y+4);
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  });
+
+  for(let i=inv.rows.length;i<7;i++){
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  }
+
+  doc.setFont('helvetica','bold');
+  doc.text('小計', cols[0]+1, y+4);
+  doc.text(fmtNum(subtotal), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','normal');
+  doc.text('消費税10%', cols[0]+1, y+4);
+  doc.text(fmtNum(tax), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','bold');
+  doc.text('合計（税込）', cols[0]+1, y+4);
+  doc.text(fmtNum(total), cols[4]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH+10;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('八十二長野銀行　中軽井沢支店　普通　７３８０１', L, y);
+  doc.text('相馬商事株式会社', L, y+7);
+  doc.text('登録番号：T3100001007295', L, y+14);
+}
+
+// ================================================================
+// 社会福祉協議会PDF
+// ================================================================
+function buildShakaifukuPDF(doc, inv, key){
+  const W = 210;
+  const L = 15, R = 195;
+  const t = getTanka(inv.yushu);
+
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  centerText(doc, '請 求 書', W/2, 20);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text(inv.name, L, 35);
+  doc.text('下記のとおりご請求申し上げます。', L, 50);
+  doc.text(invoiceDate, R-40, 32);
+
+  const subtotal = inv.rows.reduce((s,r)=>s+Math.floor(r.suryo*t),0);
+  const tax = Math.floor(subtotal*0.1);
+  const total = subtotal+tax;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica','bold');
+  doc.text('税込合計金額　￥' + fmtNum(total), L, 60);
+  doc.line(L, 62, R, 62);
+
+  // 車番欄あり
+  const cols = [L, 38, 80, 110, 140, 165, R];
+  doc.setFontSize(9);
+  drawTableHeader(doc, 68, cols, ['納品月日','品　名','車　番','数　量','単　価','金　額']);
+
+  let y = 75;
+  const rowH = 6;
+  doc.setFont('helvetica','normal');
+  inv.rows.forEach(r=>{
+    const amt = Math.floor(r.suryo*t);
+    doc.text(r.dateStr, cols[0]+1, y+4);
+    doc.text(inv.yushu, cols[1]+1, y+4);
+    doc.text(r.bango||'', cols[2]+1, y+4);
+    doc.text(String(r.suryo), cols[3]+1, y+4);
+    doc.text(String(t), cols[4]+1, y+4);
+    doc.text(fmtNum(amt), cols[5]+1, y+4);
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  });
+
+  for(let i=inv.rows.length;i<11;i++){
+    drawRowLine(doc, y, y+rowH, cols);
+    y += rowH;
+  }
+
+  doc.setFont('helvetica','bold');
+  doc.text('小計', cols[0]+1, y+4);
+  doc.text(fmtNum(subtotal), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','normal');
+  doc.text('消費税10%', cols[0]+1, y+4);
+  doc.text(fmtNum(tax), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH;
+  doc.setFont('helvetica','bold');
+  doc.text('合計（税込）', cols[0]+1, y+4);
+  doc.text(fmtNum(total), cols[5]+1, y+4);
+  drawRowLine(doc, y, y+rowH, cols); y+=rowH+10;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('八十二長野銀行　中軽井沢支店　普通　７３８０１', L, y);
+  doc.text('相馬商事株式会社', L, y+7);
+  doc.text('登録番号：T3100001007295', L, y+14);
+}
+
+// ================================================================
+// PDF描画ユーティリティ
+// ================================================================
+function centerText(doc, text, x, y){
+  const w = doc.getTextWidth(text);
+  doc.text(text, x - w/2, y);
+}
+
+function fmtNum(n){
+  return n.toLocaleString('ja-JP');
+}
+
+function drawTableHeader(doc, y, cols, labels){
+  doc.setFillColor(230,235,245);
+  doc.rect(cols[0], y, cols[cols.length-1]-cols[0], 6, 'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8.5);
+  labels.forEach((label,i)=>{
+    if(i < cols.length-1){
+      const cx = cols[i] + (cols[i+1]-cols[i])/2;
+      const w = doc.getTextWidth(label);
+      doc.text(label, cx-w/2, y+4.5);
+      doc.line(cols[i], y, cols[i], y+6);
+    }
+  });
+  doc.line(cols[cols.length-1], y, cols[cols.length-1], y+6);
+  doc.line(cols[0], y, cols[cols.length-1], y);
+  doc.line(cols[0], y+6, cols[cols.length-1], y+6);
+}
+
+function drawRowLine(doc, y1, y2, cols){
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(180,185,200);
+  cols.forEach(x=>{
+    doc.line(x, y1, x, y2);
+  });
+  doc.line(cols[0], y2, cols[cols.length-1], y2);
+  doc.setDrawColor(0,0,0);
 }
 
 function resetAll(){
@@ -1304,9 +1929,10 @@ function resetAll(){
   document.getElementById('ogaSection').style.display='none';
   document.getElementById('invoiceGroups').innerHTML='';
   document.getElementById('furibunTbody').innerHTML='';
-  tanka={hioak:169,regular:159,keiyu_tax:155,keiyu_body:140,toyu:128,haitatsu:137,source:'デフォルト値'};
+  tanka={hioak:169,regular:159,keiyu_tax:155,keiyu_body:155-getKeiyuZei(),toyu:128,haitatsu:137,source:'デフォルト値'};
   showTab('step1');
 }
 </script>
 </body>
 </html>
+
