@@ -309,10 +309,25 @@ select option{background:#1a1d27}
       <div class="status-grid" id="completeStats"></div>
     </div>
 
+    <div class="special-section" style="background:rgba(34,197,94,.06);border-color:rgba(34,197,94,.3);margin-top:12px">
+      <div class="special-title" style="color:#86efac">📤 V17請求書マスターへ出力</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        振り分け結果CSVをダウンロードして、V17の「Web振り分けCSV読込」マクロで読み込んでください。<br>
+        読み込み後、V17の「一括PDF作成」または「一括印刷」で出力できます。
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-success" style="font-size:14px;padding:12px 24px" onclick="exportV17CSV()">
+          📥 振り分け結果CSV ダウンロード
+        </button>
+      </div>
+      <div id="csvExportInfo" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>
+    </div>
+
     <div class="card" style="background:var(--surface2);margin-top:12px">
       <div class="card-title"><span class="icon">📋</span>次のステップ</div>
       <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
-        <label><input type="checkbox"> 請求書の内容確認</label>
+        <label><input type="checkbox"> CSVをダウンロードしてV17で読み込む</label>
+        <label><input type="checkbox"> V17で一括PDF作成または一括印刷を実行</label>
         <label><input type="checkbox"> 農林課→封筒は「環境課」宛</label>
         <label><input type="checkbox"> 保健福祉課→「福祉課こもれびの里」宛</label>
         <label><input type="checkbox"> 入金確認（20日・月末）</label>
@@ -320,14 +335,13 @@ select option{background:#1a1d27}
     </div>
 
     <div style="margin-top:16px">
-      <button class="btn btn-primary" onclick="generateAllPDF()">🖨️ PDF一括出力</button>
-      <button class="btn btn-secondary" style="margin-left:8px" onclick="resetAll()">🔄 新しい月のデータを処理する</button>
+      <button class="btn btn-secondary" onclick="resetAll()">🔄 新しい月のデータを処理する</button>
     </div>
   </div>
 
-  <!-- 個別ダウンロード -->
+  <!-- 個別確認 -->
   <div class="card" id="individualPdfCard" style="display:none">
-    <div class="card-title"><span class="icon">📄</span>個別ダウンロード</div>
+    <div class="card-title"><span class="icon">📋</span>振り分け結果確認</div>
     <div id="individualPdfList" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
 </div>
@@ -1426,8 +1440,95 @@ function registerNotoFont(doc) {
 }
 
 // ================================================================
-// PDF生成（jsPDF + Noto Sans JP）
+// V17用CSV出力
 // ================================================================
+function exportV17CSV(){
+  if(Object.keys(invoices).length === 0){
+    alert('振り分けデータがありません。先にCSV処理・振り分けを完了してください。');
+    return;
+  }
+
+  const keiyuZei = getKeiyuZei();
+  const lines = [];
+
+  // ヘッダー行（V17のCSV列マッピングに合わせる）
+  lines.push([
+    '会社ｺｰﾄﾞ','会社略称(漢字)','ﾚｺｰﾄﾞ種別','区分','区分名',
+    '計上年月日','伝票NO','出荷営業所ｺｰﾄﾞ','出荷営業所略称(漢字)','枚目',
+    '符号','符号名','得意先ｺｰﾄﾞ','得意先名(漢字)','番号',
+    '商品ｺｰﾄﾞ','商品名称(ｶﾅ)','荷姿','数量','単価','金額'
+  ].join(','));
+
+  let rowNo = 1001;
+
+  // 通常行（050441以外の直接処理分）
+  // 振興公社・社会福祉協議会 → 元のCSVデータをそのまま使用
+  const directRows = csvRows.filter(r =>
+    !r.cancelled && (r.tCode === 50463 || r.tCode === 50446)
+  );
+
+  directRows.forEach(r => {
+    const rawDate = r.rawDate || '';
+    lines.push([
+      '1001','相馬商事','151','1','売上',
+      rawDate, rowNo++, '1','中軽井沢','1',
+      r.fugo || 0, r.fugo === 1 ? 'マイナス' : 'プラス',
+      r.tCode, csvEsc(r.originalName || r.tName), csvEsc(r.bango || ''),
+      '001', csvEsc(r.yushuKana || r.yushuJP), '', r.suryo, '0', '0'
+    ].join(','));
+  });
+
+  // 050441の振り分け済みデータ
+  const selects = document.querySelectorAll('#furibunTbody select');
+  rows441.forEach((r, i) => {
+    const sel = selects[i] ? selects[i].value : '';
+    if(!sel) return;
+    const rawDate = r.rawDate || '';
+
+    // 請求先名取得
+    let tName441;
+    if(sel === '大賀ホールレギュラー' || sel === '大賀ホールハイオク'){
+      tName441 = '財団法人 軽井沢大賀ホール';
+    } else {
+      tName441 = getFuribunSeikyuSaki(sel);
+    }
+
+    lines.push([
+      '1001','相馬商事','151','1','売上',
+      rawDate, rowNo++, '1','中軽井沢','1',
+      '0','プラス',
+      '50441', csvEsc(tName441), csvEsc(r.bango || ''),
+      '001', csvEsc(r.yushuKana || r.yushuJP), '', r.suryo, '0', '0'
+    ].join(','));
+  });
+
+  // CSVをShift-JISでダウンロード
+  const csvText = lines.join('\r\n');
+  const fname = `振り分け結果_${processYear}年${processMonth}月.csv`;
+
+  // Shift-JIS変換（TextEncoderは非対応のためUTF-8 BOM付きで出力）
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csvText], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  // 出力情報表示
+  const totalRows = lines.length - 1;
+  document.getElementById('csvExportInfo').innerHTML =
+    `✅ ${totalRows}件を出力しました。ファイル名：${fname}`;
+}
+
+function csvEsc(v){
+  const s = String(v);
+  if(s.includes(',') || s.includes('"') || s.includes('\n')){
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+  return s;
+}
 
 async function generateSinglePDF(key){
   const inv = invoices[key];
