@@ -1781,70 +1781,128 @@ function parseCSVLine(line){
 // ================================================================
 // 単価ファイル読み込み
 // ================================================================
+// 日別単価テーブル（全シート分を保持）
+let tankaTable = []; // [{fromDate, hioak, regular, keiyu_tax, keiyu_body, toyu, haitatsu, source}]
+
 function loadTanka(file){
   const reader = new FileReader();
   reader.onload = e => {
     try{
       const wb = XLSX.read(e.target.result, {type:'array', cellFormula:false});
-      // 最新シートを探す（シート名の数字部分が処理月以前で最大のもの）
       const sheets = wb.SheetNames;
-      let bestIdx = 0, bestDate = 0;
-      for(let i=0;i<sheets.length;i++){
-        const nums = sheets[i].match(/\d{6}/);
-        if(nums){
-          const d = parseInt('20'+nums[0]);
-          const target = processYear*10000 + processMonth*100 + 1;
-          if(d <= target && d > bestDate){ bestDate=d; bestIdx=i; }
-        }
-      }
-      const ws = wb.Sheets[sheets[bestIdx]];
-      const range = XLSX.utils.decode_range(ws['!ref']||'A1:T50');
-      // 行12以降でB列='050441'を探す
-      for(let r=11; r<=range.e.r; r++){
-        const bCell = ws[XLSX.utils.encode_cell({r,c:1})];
-        if(!bCell) continue;
-        const v = String(bCell.v||'').trim();
-        if(v==='050441'){
-          // 基準価格（行7=index6）
-          const base_h = getCellNum(ws, 6, 11);  // L8 = index r:7,c:11
-          const base_r = getCellNum(ws, 6, 12);
-          const base_k = getCellNum(ws, 6, 13);
-          const base_t = getCellNum(ws, 6, 14);
-          const base_p = getCellNum(ws, 6, 15);
-          // 差額（D=3,E=4,F=5,G=6,H=7）
-          const diff_h = getCellNum(ws, r, 3)||0;
-          const diff_r = getCellNum(ws, r, 4)||0;
-          const diff_k = getCellNum(ws, r, 5)||0;
-          const diff_t = getCellNum(ws, r, 6)||0;
-          const diff_p = getCellNum(ws, r, 7)||0;
+      const keiyuZei = getKeiyuZei();
+      const entries = [];
 
-          // 消費税抜き基準 (行7=index6)
-          const b8_h = getCellNum(ws, 7, 11);
-          const b8_r = getCellNum(ws, 7, 12);
-          const b8_k = getCellNum(ws, 7, 13);
-          const b8_t = getCellNum(ws, 7, 14);
-          const b8_p = getCellNum(ws, 7, 15);
+      sheets.forEach(sname=>{
+        // シート名から8桁日付を抽出
+        const nums = sname.match(/\d{6,8}/g);
+        if(!nums) return;
+        let dateStr = nums.find(n=>n.length===8) || ('20'+nums.find(n=>n.length===6));
+        if(!dateStr || dateStr.length!==8) return;
+        const y = parseInt(dateStr.slice(0,4));
+        const m = parseInt(dateStr.slice(4,6));
+        const d = parseInt(dateStr.slice(6,8));
+        if(isNaN(y)||isNaN(m)||isNaN(d)) return;
+        const fromDate = new Date(y, m-1, d);
 
-          tanka = {
-            hioak: Math.round(b8_h + diff_h),
-            regular: Math.round(b8_r + diff_r),
-            keiyu_tax: Math.round(b8_k + diff_k),
-            keiyu_body: Math.round(b8_k + diff_k - getKeiyuZei()),
-            toyu: Math.round(b8_t + diff_t),
-            haitatsu: Math.round(b8_p + diff_p),
-            source: sheets[bestIdx]
-          };
-          break;
+        const ws = wb.Sheets[sname];
+        if(!ws) return;
+        const range = XLSX.utils.decode_range(ws['!ref']||'A1:T50');
+
+        // 基準価格（行8=index7）税抜
+        const b8_h = getCellNum(ws, 7, 11);
+        const b8_r = getCellNum(ws, 7, 12);
+        const b8_k = getCellNum(ws, 7, 13);
+        const b8_t = getCellNum(ws, 7, 14);
+        const b8_p = getCellNum(ws, 7, 15);
+        if(b8_r === 0) return; // 無効シートをスキップ
+
+        // 050441の差額
+        let dh=0, dr=0, dk=0, dt=0, dp=0;
+        for(let r=11; r<=range.e.r; r++){
+          const bCell = ws[XLSX.utils.encode_cell({r,c:1})];
+          if(!bCell) continue;
+          if(String(bCell.v||'').trim()==='050441'){
+            dh = getCellNum(ws,r,3)||0;
+            dr = getCellNum(ws,r,4)||0;
+            dk = getCellNum(ws,r,5)||0;
+            dt = getCellNum(ws,r,6)||0;
+            dp = getCellNum(ws,r,7)||0;
+            break;
+          }
         }
+
+        entries.push({
+          fromDate,
+          hioak:      Math.round(b8_h + dh),
+          regular:    Math.round(b8_r + dr),
+          keiyu_tax:  Math.round(b8_k + dk),
+          keiyu_body: Math.round(b8_k + dk - keiyuZei),
+          toyu:       Math.round(b8_t + dt),
+          haitatsu:   Math.round(b8_p + dp),
+          source:     sname.trim(),
+        });
+      });
+
+      if(entries.length === 0){
+        alert('有効な単価シートが見つかりませんでした。デフォルト値を使用します。');
+        return;
       }
+
+      // 日付昇順でソート
+      entries.sort((a,b)=>a.fromDate - b.fromDate);
+      tankaTable = entries;
+
+      // tanka（後方互換）を最新エントリで更新
+      const latest = getEntryByDate(new Date(processYear||2026, (processMonth||6)-1, 28));
+      tanka = { ...latest, source: latest.source };
+
       showTankaStatus();
       document.getElementById('tankaUploadArea').classList.add('upload-done');
+      console.log(`単価テーブル構築完了: ${entries.length}シート`);
+
     }catch(err){
       console.error(err);
       alert('単価ファイルの読み込みに失敗しました。デフォルト値を使用します。');
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// 指定日に適用されるエントリを返す
+function getEntryByDate(date){
+  if(tankaTable.length === 0) return tanka; // デフォルト
+  let best = tankaTable[0];
+  for(const e of tankaTable){
+    if(e.fromDate <= date && e.fromDate >= best.fromDate) best = e;
+  }
+  return best;
+}
+
+// 給油日から単価を取得（日別対応版）
+function getTankaByDate(yushu, dateStr){
+  // dateStr: 'yyyymmdd' 形式
+  if(!dateStr || tankaTable.length === 0) return getTanka(yushu);
+  const y = parseInt(dateStr.slice(0,4));
+  const m = parseInt(dateStr.slice(4,6));
+  const d = parseInt(dateStr.slice(6,8));
+  if(isNaN(y)) return getTanka(yushu);
+  const date = new Date(y, m-1, d);
+  const entry = getEntryByDate(date);
+  const keiyuZei = getKeiyuZei();
+  const map = {
+    'レギュラーガソリン': entry.regular,
+    'ENEOSハイオク':      entry.hioak,
+    '軽油':              entry.keiyu_tax,
+    '軽油本体':          entry.keiyu_body,
+    '灯油':              entry.toyu,
+    '配達灯油':          entry.haitatsu,
+  };
+  if(map[yushu] !== undefined) return map[yushu];
+  // 特殊油種
+  const special = getSpecialTanka();
+  if(special[yushu] !== undefined) return special[yushu];
+  return 0;
 }
 
 function getCellNum(ws, r, c){
@@ -1855,16 +1913,38 @@ function getCellNum(ws, r, c){
 
 function showTankaStatus(){
   const el = document.getElementById('tankaStatus');
-  const items = [
-    {name:'ハイオク', v:tanka.hioak},
-    {name:'レギュラー', v:tanka.regular},
-    {name:'軽油(本体)', v:tanka.keiyu_body},
-    {name:'灯油', v:tanka.toyu},
-    {name:'配達灯油', v:tanka.haitatsu},
-  ];
-  el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);width:100%;margin-bottom:8px;letter-spacing:1px">APPLIED: ${tanka.source}</div>` +
-    items.map(x=>`<div class="tanka-chip"><div class="tanka-key">${x.name}</div><div class="tanka-val">${x.v}<span class="tanka-unit">円</span></div></div>`).join('');
+
+  if(tankaTable.length > 0){
+    // 複数シートの場合：シート一覧と最新単価を表示
+    const latest = tankaTable[tankaTable.length-1];
+    const items = [
+      {name:'ハイオク',    v:latest.hioak},
+      {name:'レギュラー',  v:latest.regular},
+      {name:'軽油(本体)',  v:latest.keiyu_body},
+      {name:'灯油',        v:latest.toyu},
+      {name:'配達灯油',    v:latest.haitatsu},
+    ];
+    el.innerHTML = `
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ok);width:100%;margin-bottom:6px;letter-spacing:1px">
+        ✓ ${tankaTable.length}シート読み込み済み（給油日別に自動適用）
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);width:100%;margin-bottom:8px">
+        ${tankaTable.map(e=>`<span style="margin-right:8px;color:${e===tankaTable[tankaTable.length-1]?'var(--amber)':'var(--t3)'}">${e.source}</span>`).join('')}
+      </div>
+    ` + items.map(x=>`<div class="tanka-chip"><div class="tanka-key">${x.name}</div><div class="tanka-val">${x.v}<span class="tanka-unit">円</span></div></div>`).join('');
+  } else {
+    const items = [
+      {name:'ハイオク',    v:tanka.hioak},
+      {name:'レギュラー',  v:tanka.regular},
+      {name:'軽油(本体)',  v:tanka.keiyu_body},
+      {name:'灯油',        v:tanka.toyu},
+      {name:'配達灯油',    v:tanka.haitatsu},
+    ];
+    el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);width:100%;margin-bottom:8px;letter-spacing:1px">APPLIED: ${tanka.source}</div>` +
+      items.map(x=>`<div class="tanka-chip"><div class="tanka-key">${x.name}</div><div class="tanka-val">${x.v}<span class="tanka-unit">円</span></div></div>`).join('');
+  }
 }
+
 
 // ================================================================
 // CSV サマリー表示
@@ -2570,8 +2650,13 @@ function generateInvoices(selects){
 }
 
 function calcTotal(rows, yushu){
-  const t = getTanka(yushu);
-  return rows.reduce((s,r)=>s+Math.round(r.suryo*t),0);
+  // 給油日別単価対応
+  return rows.reduce((s,r)=>{
+    const t = tankaTable.length > 0
+      ? getTankaByDate(yushu, r.rawDate||'')
+      : getTanka(yushu);
+    return s + Math.round(r.suryo * t);
+  }, 0);
 }
 
 function getFuribunSeikyuSaki(sel){
@@ -2709,31 +2794,44 @@ function renderStep3(){
 }
 
 function renderInvoiceDetail(inv, key){
-  const t = getTanka(inv.yushu);
-  const subtotal = inv.rows.reduce((s,r)=>s+Math.round(r.suryo*t),0);
+  // 給油日別単価対応
+  const rowsWithTanka = inv.rows.map(r=>{
+    const t = tankaTable.length > 0
+      ? getTankaByDate(inv.yushu, r.rawDate||'')
+      : getTanka(inv.yushu);
+    return {...r, appliedTanka: t, amt: Math.round(r.suryo * t)};
+  });
+  const subtotal = rowsWithTanka.reduce((s,r)=>s+r.amt, 0);
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
 
+  // 単価が複数種類あるか確認
+  const tankaSet = new Set(rowsWithTanka.map(r=>r.appliedTanka));
+  const multiTanka = tankaSet.size > 1;
+
   return `
     <div style="margin-bottom:12px">
-      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${key} — ${yushuTag(inv.yushu)}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:8px">
+        ${key} — ${yushuTag(inv.yushu)}
+        ${multiTanka ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--amber);margin-left:8px">⬡ ${tankaSet.size}種の単価適用</span>` : ''}
+      </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>日付</th><th>品名</th>${inv.type==='shakaifuku'?'<th>車番</th>':''}<th>数量</th><th>単価</th><th>金額</th></tr></thead>
           <tbody>
-            ${inv.rows.map(r=>`
+            ${rowsWithTanka.map(r=>`
               <tr>
                 <td>${r.dateStr}</td>
                 <td>${yushuTag(r.yushuJP)}</td>
                 ${inv.type==='shakaifuku'?`<td style="font-size:11px">${r.bango}</td>`:''}
                 <td>${r.suryo}L</td>
-                <td>${t}円</td>
-                <td>${Math.round(r.suryo*t).toLocaleString()}円</td>
+                <td style="color:${multiTanka?'var(--amber)':'var(--t2)'}">${r.appliedTanka}円</td>
+                <td>${r.amt.toLocaleString()}円</td>
               </tr>
             `).join('')}
-            <tr style="background:rgba(59,130,246,.08)"><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right;font-weight:700">小計</td><td></td><td style="font-weight:700">${subtotal.toLocaleString()}円</td></tr>
-            <tr><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right">消費税10%</td><td></td><td>${tax.toLocaleString()}円</td></tr>
-            <tr style="background:rgba(34,197,94,.08)"><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right;font-weight:700;color:var(--green)">合計（税込）</td><td></td><td style="font-weight:700;color:var(--green)">${total.toLocaleString()}円</td></tr>
+            <tr style="background:rgba(59,130,246,.06)"><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right;font-weight:700">小計</td><td></td><td style="font-weight:700">${subtotal.toLocaleString()}円</td></tr>
+            <tr><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right;color:var(--t3)">消費税10%</td><td></td><td style="color:var(--t3)">${tax.toLocaleString()}円</td></tr>
+            <tr style="background:rgba(52,211,153,.06)"><td colspan="${inv.type==='shakaifuku'?4:3}" style="text-align:right;font-weight:700;color:var(--ok)">合計（税込）</td><td></td><td style="font-weight:700;color:var(--ok)">${total.toLocaleString()}円</td></tr>
           </tbody>
         </table>
       </div>
@@ -3630,6 +3728,7 @@ function resetAll(){
   document.getElementById('invoiceGroups').innerHTML='';
   document.getElementById('furibunTbody').innerHTML='';
   tanka={hioak:169,regular:159,keiyu_tax:155,keiyu_body:155-getKeiyuZei(),toyu:128,haitatsu:137,source:'デフォルト値'};
+  tankaTable = [];
   showTab('step1');
 }
 </script>
