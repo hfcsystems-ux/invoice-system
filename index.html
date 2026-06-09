@@ -953,6 +953,22 @@ select option { background: #1a2236; }
       </div>
     </div>
 
+    <div class="sidebar-section">
+      <div class="sidebar-label">管理</div>
+      <div class="nav-item" onclick="showTab('history')" id="nav-history">
+        <div class="nav-icon">📅</div>
+        <div class="nav-text">月次履歴</div>
+      </div>
+      <div class="nav-item" onclick="showTab('payment')" id="nav-payment">
+        <div class="nav-icon">💰</div>
+        <div class="nav-text">入金確認</div>
+      </div>
+      <div class="nav-item" onclick="showTab('backup')" id="nav-backup">
+        <div class="nav-icon">🛡</div>
+        <div class="nav-text">バックアップ</div>
+      </div>
+    </div>
+
     <div class="sidebar-section" style="margin-top:auto">
       <div class="sys-info-panel">
         <div class="sys-info-row">
@@ -1410,6 +1426,164 @@ select option { background: #1a2236; }
       </div>
     </div>
 
+    <!-- 月次履歴 -->
+    <div id="tab-history" class="page">
+      <div class="sec-header">
+        <div class="sec-step-badge" style="background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.3);color:var(--ice)">📅</div>
+        <div>
+          <div class="sec-title">月次履歴</div>
+          <div class="sec-sub">請求額・入金状況の月別記録</div>
+        </div>
+      </div>
+
+      <!-- 年別サマリー -->
+      <div class="stat-grid" id="historySummaryGrid"></div>
+
+      <!-- 月別一覧 -->
+      <div class="card">
+        <div class="card-title card-title-ice">📋 月別請求・入金サマリー<span class="line"></span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>年月</th>
+                <th>請求件数</th>
+                <th>請求総額（税抜）</th>
+                <th>入金済</th>
+                <th>未入金</th>
+                <th>状態</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="historyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 月別詳細 -->
+      <div id="historyDetailArea"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-danger btn-sm" onclick="clearAllHistory()">🗑 全履歴を削除</button>
+      </div>
+    </div>
+
+    <!-- 入金確認 -->
+    <div id="tab-payment" class="page">
+      <div class="sec-header">
+        <div class="sec-step-badge" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:var(--ok)">💰</div>
+        <div>
+          <div class="sec-title">入金確認</div>
+          <div class="sec-sub">取引先別の入金照合（20日・月末）</div>
+        </div>
+      </div>
+
+      <!-- 対象月選択 -->
+      <div class="card card-amber">
+        <div class="card-title card-title-amber">対象月を選択<span class="line"></span></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="paymentMonthSelect" onchange="renderPaymentPage()"
+            style="min-width:160px;background:var(--surface2);border:1px solid var(--border-bright);color:var(--t1);padding:8px 12px;border-radius:var(--r);font-size:13px">
+            <option value="">── 月を選択 ──</option>
+          </select>
+          <div style="font-size:11px;color:var(--t3)">CSV出力済みの月が選択できます</div>
+        </div>
+      </div>
+
+      <div id="paymentMainArea"></div>
+    </div>
+
+    <!-- バックアップ・復元 -->
+    <div id="tab-backup" class="page">
+      <div class="sec-header">
+        <div class="sec-step-badge" style="background:rgba(167,139,250,.1);border-color:rgba(167,139,250,.3);color:#c4b5fd">🛡</div>
+        <div>
+          <div class="sec-title">バックアップ・復元</div>
+          <div class="sec-sub">設定・履歴データの保護</div>
+        </div>
+      </div>
+
+      <!-- 注意書き -->
+      <div class="alert alert-warn" style="margin-bottom:20px">
+        ⚠ データはブラウザのlocalStorageに保存されています。ブラウザのキャッシュクリア・機種変更・ブラウザ変更でデータが消える恐れがあります。定期的にバックアップを取ってください。
+      </div>
+
+      <!-- エクスポート -->
+      <div class="card card-amber">
+        <div class="card-title card-title-amber">📤 エクスポート（バックアップ）<span class="line"></span></div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:16px">
+          現在の全データをJSONファイルとして保存します。<br>
+          OneDriveやiCloudに保存しておくと安全です。
+        </div>
+
+        <!-- データ状況 -->
+        <div id="backupDataStatus" class="stat-grid" style="margin-bottom:16px"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary btn-lg" onclick="exportBackup()">
+            ↓ 全データをバックアップ
+          </button>
+          <button class="btn btn-ghost" onclick="exportBackupPartial('settings')">
+            設定のみ
+          </button>
+          <button class="btn btn-ghost" onclick="exportBackupPartial('history')">
+            履歴のみ
+          </button>
+        </div>
+      </div>
+
+      <!-- インポート -->
+      <div class="card">
+        <div class="card-title card-title-ice">📥 インポート（復元）<span class="line"></span></div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:16px">
+          バックアップファイルからデータを復元します。<br>
+          <strong style="color:var(--err)">現在のデータは上書きされます。</strong>復元前に現在のデータをバックアップしてください。
+        </div>
+
+        <div class="upload-zone" id="backupImportArea"
+             onclick="document.getElementById('backupFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleBackupDrop(event)">
+          <input type="file" id="backupFile" accept=".json" onchange="importBackup(this.files[0])">
+          <div class="upload-icon-wrap">📂</div>
+          <div class="upload-label">バックアップJSONファイルをドロップ、またはタップして選択</div>
+          <div class="upload-sub">SOMA-FUEL-BACKUP_*.json</div>
+        </div>
+
+        <div id="importPreview" style="margin-top:14px"></div>
+      </div>
+
+      <!-- 自動バックアップリマインダー -->
+      <div class="card">
+        <div class="card-title">🔔 バックアップ推奨タイミング<span class="line"></span></div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;color:var(--t2)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--amber);font-size:16px">●</span>
+            毎月CSV出力後（月次作業完了時）
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--amber);font-size:16px">●</span>
+            マスター設定を変更した後
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--amber);font-size:16px">●</span>
+            入金確認を記録した後（20日・月末）
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--ice);font-size:16px">●</span>
+            iPadのブラウザキャッシュをクリアする前
+          </div>
+        </div>
+      </div>
+
+      <!-- 最終バックアップ情報 -->
+      <div class="card" id="lastBackupCard" style="display:none">
+        <div class="card-title">📋 最終バックアップ情報<span class="line"></span></div>
+        <div id="lastBackupInfo"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 <script>
@@ -1429,14 +1603,16 @@ let invoices = {}; // 生成された請求書データ
 // タブ切り替え
 // ================================================================
 function showTab(id) {
-  // サイドバーナビのactive切り替え
-  ['step1','step2','step3','step4','master','howto'].forEach(s=>{
+  ['step1','step2','step3','step4','master','howto','history','payment','backup'].forEach(s=>{
     const el = document.getElementById('nav-'+s);
     if(el) el.classList.toggle('active', s===id);
   });
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='master') renderMaster();
+  if(id==='history') renderHistoryPage();
+  if(id==='payment') initPaymentSelect();
+  if(id==='backup')  renderBackupStatus();
 }
 
 // ================================================================
@@ -2095,6 +2271,20 @@ let FURIBUN_OPTIONS = getFuribunOptions(); // 後方互換のため残す
 function goToStep2(){
   buildFuribunTable();
   showTab('step2');
+  // 前回の振り分けを自動適用
+  const applied = applyLastFuribun();
+  if(applied > 0){
+    const alert = document.getElementById('furibunAlert');
+    const msg = `💡 前回の振り分けから ${applied} 件を自動適用しました。確認してください。`;
+    alert.textContent = msg;
+    alert.className = 'alert alert-ice';
+    alert.style.display = 'flex';
+    setTimeout(()=>{
+      alert.style.display = 'none';
+      alert.className = 'alert alert-warn';
+      alert.textContent = '⚠ 未選択の行があります。すべて選択してから次へ進んでください。';
+    }, 4000);
+  }
 }
 
 function buildFuribunTable(){
@@ -2298,6 +2488,17 @@ function getFuribunSeikyuSaki(sel){
 // STEP3 表示
 // ================================================================
 function renderStep3(){
+  // エラーチェック（前月比較）
+  const errAlerts = runErrorCheck();
+  const errHtml = renderErrorAlerts(errAlerts);
+  let errArea = document.getElementById('errorCheckArea');
+  if(!errArea){
+    errArea = document.createElement('div');
+    errArea.id = 'errorCheckArea';
+    document.getElementById('furikouSection').before(errArea);
+  }
+  errArea.innerHTML = errHtml;
+
   // 振興公社
   const furiKs = Object.entries(invoices).filter(([k])=>k.startsWith('振興公社'));
   if(furiKs.length>0){
@@ -2476,11 +2677,763 @@ function loadDemo(){
 // ================================================================
 // V17用CSV出力
 // ================================================================
+// ================================================================
+// ① 振り分け記憶機能
+// ================================================================
+function saveLastFuribun(){
+  // 現在の振り分け結果を保存（車番+油種 → 選択値）
+  const selects = document.querySelectorAll('#furibunTbody select');
+  const memory = {};
+  rows441.forEach((r,i)=>{
+    const sel = selects[i] ? selects[i].value : '';
+    if(sel && r.bango){
+      const key = `${r.bango}|${r.yushuJP}`;
+      memory[key] = sel;
+    }
+    // 車番がない場合は油種だけで記憶
+    if(sel && !r.bango){
+      const key = `_|${r.yushuJP}`;
+      if(!memory[key]) memory[key] = sel;
+    }
+  });
+  localStorage.setItem('lastFuribun', JSON.stringify(memory));
+}
+
+function applyLastFuribun(){
+  const saved = localStorage.getItem('lastFuribun');
+  if(!saved) return 0;
+  const memory = JSON.parse(saved);
+  const selects = document.querySelectorAll('#furibunTbody select');
+  let applied = 0;
+  rows441.forEach((r,i)=>{
+    const sel = selects[i];
+    if(!sel || sel.value) return; // 既に選択済みはスキップ
+    // 車番+油種で照合
+    const key1 = `${r.bango}|${r.yushuJP}`;
+    const key2 = `_|${r.yushuJP}`;
+    const suggestion = memory[key1] || memory[key2];
+    if(suggestion){
+      // 選択肢に存在するか確認
+      const opt = Array.from(sel.options).find(o=>o.value===suggestion);
+      if(opt){ sel.value = suggestion; applied++; }
+    }
+  });
+  return applied;
+}
+
+// ================================================================
+// ② エラーチェック（前月比較）
+// ================================================================
+function runErrorCheck(){
+  const alerts = [];
+  const history = loadHistory();
+  if(Object.keys(history).length === 0) return alerts;
+
+  // 前月のデータを取得
+  const keys = Object.keys(history).sort().reverse();
+  const prevKey = keys[0]; // 最新の履歴
+  const prevData = history[prevKey];
+  if(!prevData || !prevData.invoices) return alerts;
+
+  // 今月のinvoicesと比較
+  Object.entries(invoices).forEach(([key, inv])=>{
+    const prev = prevData.invoices[key];
+    if(!prev) return; // 前月にない取引先はスキップ
+    const ratio = inv.total / prev.total;
+    if(ratio > 1.3){
+      alerts.push({ key, name: inv.name, yushu: inv.yushu,
+        type: 'up', prev: prev.total, curr: inv.total,
+        pct: Math.round((ratio-1)*100) });
+    } else if(ratio < 0.7){
+      alerts.push({ key, name: inv.name, yushu: inv.yushu,
+        type: 'down', prev: prev.total, curr: inv.total,
+        pct: Math.round((1-ratio)*100) });
+    }
+  });
+  return alerts;
+}
+
+function renderErrorAlerts(alerts){
+  if(alerts.length === 0) return '';
+  return `<div style="margin-bottom:16px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--warn);letter-spacing:2px;margin-bottom:8px">
+      ⚠ 前月比 異常検知 ${alerts.length}件
+    </div>
+    ${alerts.map(a=>`
+      <div class="alert alert-warn" style="margin-bottom:6px">
+        <div>
+          <strong>${a.name}</strong>（${a.yushu}）—
+          ${a.type==='up'
+            ? `前月比 <strong style="color:var(--err)">+${a.pct}%増加</strong>`
+            : `前月比 <strong style="color:var(--ice)">-${a.pct}%減少</strong>`
+          }
+          　前月：¥${a.prev.toLocaleString()} → 今月：¥${a.curr.toLocaleString()}
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+// ================================================================
+// ③ 月次履歴の保存・管理
+// ================================================================
+const HISTORY_KEY = 'monthlyHistory';
+
+function loadHistory(){
+  try {
+    const s = localStorage.getItem(HISTORY_KEY);
+    return s ? JSON.parse(s) : {};
+  } catch(e){ return {}; }
+}
+
+function saveHistory(){
+  const history = loadHistory();
+  const key = `${processYear}-${String(processMonth).padStart(2,'0')}`;
+
+  // 請求書データを保存
+  const invData = {};
+  Object.entries(invoices).forEach(([k,inv])=>{
+    invData[k] = { name: inv.name, yushu: inv.yushu, total: inv.total, rows: inv.rows.length };
+  });
+
+  history[key] = {
+    year: processYear,
+    month: processMonth,
+    invoiceDate,
+    savedAt: new Date().toISOString(),
+    invoiceCount: Object.keys(invoices).length,
+    totalAmount: Object.values(invoices).reduce((s,v)=>s+v.total,0),
+    invoices: invData,
+    tankaSource: tanka.source,
+    // 入金データの初期化（まだ入金なし）
+    payments: history[key] ? history[key].payments || {} : {},
+    carryOver: history[key] ? history[key].carryOver || {} : {},
+  };
+
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  return key;
+}
+
+
+// 月次履歴ページ描画
+function renderHistoryPage(){
+  const history = loadHistory();
+  const keys = Object.keys(history).sort().reverse();
+
+  if(keys.length === 0){
+    document.getElementById('historySummaryGrid').innerHTML = '';
+    document.getElementById('historyTbody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:24px">
+        まだ履歴がありません。CSV出力を実行すると自動記録されます。
+      </td></tr>`;
+    return;
+  }
+
+  // サマリー
+  const totalMonths = keys.length;
+  const totalAmt = keys.reduce((s,k)=>s+(history[k].totalAmount||0),0);
+  const latestKey = keys[0];
+  const latest = history[latestKey];
+  const totalUnpaid = keys.reduce((s,k)=>{
+    const h = history[k];
+    const paid = Object.values(h.payments||{}).reduce((a,b)=>a+(b.amount||0),0);
+    return s + Math.max(0, (h.totalAmount||0)*1.1 - paid);
+  },0);
+
+  document.getElementById('historySummaryGrid').innerHTML = `
+    <div class="stat-tile hi"><div class="stat-label">記録月数</div><div class="stat-val">${totalMonths}<span class="stat-unit">ヶ月</span></div></div>
+    <div class="stat-tile ok"><div class="stat-label">累計請求（税抜）</div><div class="stat-val" style="font-size:14px">¥${Math.round(totalAmt).toLocaleString()}</div></div>
+    <div class="stat-tile ice"><div class="stat-label">最新月</div><div class="stat-val" style="font-size:14px">${latest.year}.${String(latest.month).padStart(2,'0')}</div></div>
+    <div class="stat-tile warn"><div class="stat-label">未入金残高</div><div class="stat-val" style="font-size:14px">¥${Math.round(totalUnpaid).toLocaleString()}</div></div>
+  `;
+
+  // 月別一覧
+  document.getElementById('historyTbody').innerHTML = keys.map(k=>{
+    const h = history[k];
+    const totalWithTax = Math.round((h.totalAmount||0)*1.1);
+    const paid = Object.values(h.payments||{}).reduce((s,p)=>s+(p.amount||0),0);
+    const unpaid = Math.max(0, totalWithTax - paid);
+    const pct = totalWithTax > 0 ? Math.round(paid/totalWithTax*100) : 0;
+    const statusColor = pct>=100 ? 'var(--ok)' : pct>0 ? 'var(--amber)' : 'var(--err)';
+    const statusLabel = pct>=100 ? '入金完了' : pct>0 ? '一部入金' : '未入金';
+    return `<tr>
+      <td style="font-family:'JetBrains Mono',monospace;color:var(--t1)">${h.year}年${h.month}月</td>
+      <td>${h.invoiceCount}件</td>
+      <td style="font-weight:600">¥${(h.totalAmount||0).toLocaleString()}</td>
+      <td style="color:var(--ok)">¥${Math.round(paid).toLocaleString()}</td>
+      <td style="color:${unpaid>0?'var(--err)':'var(--t3)'}">¥${Math.round(unpaid).toLocaleString()}</td>
+      <td><span style="color:${statusColor};font-size:11px;font-weight:600">${statusLabel}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="showHistoryDetail('${k}')">詳細</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showHistoryDetail(key){
+  const history = loadHistory();
+  const h = history[key];
+  if(!h) return;
+
+  const area = document.getElementById('historyDetailArea');
+  const invRows = Object.entries(h.invoices||{}).map(([k,inv])=>{
+    const t = Math.round(inv.total*1.1);
+    const p = h.payments && h.payments[k] ? h.payments[k].amount : 0;
+    const diff = t - p;
+    return `<tr>
+      <td style="font-size:12px;color:var(--t1)">${inv.name}</td>
+      <td>${yushuTag(inv.yushu)}</td>
+      <td>${inv.rows}件</td>
+      <td style="font-weight:600">¥${t.toLocaleString()}</td>
+      <td style="color:${p>0?'var(--ok)':'var(--t3)'}">¥${p.toLocaleString()}</td>
+      <td style="color:${diff>0?'var(--err)':'var(--ok)'}">
+        ${diff>0?'▲':''}¥${Math.abs(diff).toLocaleString()}
+      </td>
+    </tr>`;
+  }).join('');
+
+  area.innerHTML = `
+    <div class="card card-ice" style="margin-top:12px">
+      <div class="card-title card-title-ice">${h.year}年${h.month}月 詳細<span class="line"></span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>取引先</th><th>油種</th><th>件数</th><th>請求（税込）</th><th>入金済</th><th>差額</th></tr></thead>
+          <tbody>${invRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function clearAllHistory(){
+  if(!confirm('全ての月次履歴を削除しますか？入金データも含めて削除されます。この操作は元に戻せません。')) return;
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistoryPage();
+}
+
+// ================================================================
+// ④ 入金確認機能
+// ================================================================
+function initPaymentSelect(){
+  const history = loadHistory();
+  const keys = Object.keys(history).sort().reverse();
+  const sel = document.getElementById('paymentMonthSelect');
+  sel.innerHTML = '<option value="">── 月を選択 ──</option>' +
+    keys.map(k=>{
+      const h = history[k];
+      return `<option value="${k}">${h.year}年${h.month}月</option>`;
+    }).join('');
+  if(keys.length > 0){ sel.value = keys[0]; renderPaymentPage(); }
+}
+
+function renderPaymentPage(){
+  const key = document.getElementById('paymentMonthSelect').value;
+  if(!key){ document.getElementById('paymentMainArea').innerHTML=''; return; }
+
+  const history = loadHistory();
+  const h = history[key];
+  if(!h){ return; }
+
+  const area = document.getElementById('paymentMainArea');
+
+  // 取引先別残高テーブル
+  const rows = Object.entries(h.invoices||{}).map(([k,inv])=>{
+    const billing = Math.round(inv.total*1.1);
+    const carry = h.carryOver && h.carryOver[k] ? h.carryOver[k] : 0;
+    const totalDue = billing + carry;
+    const paid = h.payments && h.payments[k] ? h.payments[k].amount||0 : 0;
+    const payDate = h.payments && h.payments[k] ? h.payments[k].date||'' : '';
+    const unpaid = totalDue - paid;
+    const statusColor = unpaid<=0 ? 'var(--ok)' : paid>0 ? 'var(--amber)' : 'var(--err)';
+
+    return `
+      <tr id="prow_${k.replace(/[|]/g,'_')}">
+        <td style="font-size:12px;color:var(--t1);min-width:160px">${inv.name}</td>
+        <td>${yushuTag(inv.yushu)}</td>
+        <td style="color:${carry>0?'var(--warn)':'var(--t3)'}">
+          ${carry>0?'▲':''} ¥${Math.abs(carry).toLocaleString()}
+        </td>
+        <td style="font-weight:600">¥${billing.toLocaleString()}</td>
+        <td style="font-weight:700;color:var(--amber)">¥${totalDue.toLocaleString()}</td>
+        <td>
+          <input type="number" value="${paid||''}" placeholder="0"
+            data-key="${k}" data-histkey="${key}"
+            style="width:110px;background:var(--surface2);border:1px solid var(--border-bright);color:var(--t1);padding:6px 8px;border-radius:var(--r);font-size:12px;text-align:right"
+            onfocus="this.style.borderColor='var(--amber)'" onblur="this.style.borderColor='var(--border-bright)'"
+            onchange="updatePayment(this)">
+        </td>
+        <td>
+          <input type="date" value="${payDate}" data-key="${k}" data-histkey="${key}" data-type="date"
+            style="background:var(--surface2);border:1px solid var(--border-bright);color:var(--t1);padding:5px 8px;border-radius:var(--r);font-size:11px"
+            onfocus="this.style.borderColor='var(--amber)'" onblur="this.style.borderColor='var(--border-bright)'"
+            onchange="updatePaymentDate(this)">
+        </td>
+        <td>
+          <span style="color:${statusColor};font-size:11px;font-weight:700">
+            ${unpaid<=0?'✓ 完了':paid>0?'一部':'未入金'}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // 繰越設定ボタン
+  const totalBilling = Object.values(h.invoices||{}).reduce((s,inv)=>s+Math.round(inv.total*1.1),0);
+  const totalPaid = Object.values(h.payments||{}).reduce((s,p)=>s+(p.amount||0),0);
+  const totalCarry = Object.values(h.carryOver||{}).reduce((s,c)=>s+c,0);
+  const totalUnpaid = totalBilling + totalCarry - totalPaid;
+
+  area.innerHTML = `
+    <!-- サマリー -->
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-tile hi"><div class="stat-label">今月請求（税込）</div><div class="stat-val" style="font-size:14px">¥${totalBilling.toLocaleString()}</div></div>
+      <div class="stat-tile warn"><div class="stat-label">前月繰越</div><div class="stat-val" style="font-size:14px">¥${totalCarry.toLocaleString()}</div></div>
+      <div class="stat-tile ok"><div class="stat-label">入金済合計</div><div class="stat-val" style="font-size:14px">¥${totalPaid.toLocaleString()}</div></div>
+      <div class="stat-tile ${totalUnpaid>0?'':'ok'}">
+        <div class="stat-label">未入金残高</div>
+        <div class="stat-val" style="font-size:14px;color:${totalUnpaid>0?'var(--err)':'var(--ok)'}">
+          ¥${Math.max(0,totalUnpaid).toLocaleString()}
+        </div>
+      </div>
+    </div>
+
+    <!-- 入金照合テーブル -->
+    <div class="card">
+      <div class="card-title card-title-ok">💰 取引先別 入金照合<span class="line"></span>
+        <button class="btn btn-ghost btn-sm" onclick="showCarryOverEdit('${key}')">繰越設定</button>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:12px">
+        入金額・日付を入力してください。自動保存されます。
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>取引先</th><th>油種</th><th>前月繰越</th>
+              <th>今月請求</th><th>請求合計</th>
+              <th>入金額</th><th>入金日</th><th>状態</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 合算入力パネル -->
+    <div class="card card-amber">
+      <div class="card-title card-title-amber">⚡ 合算振込 照合<span class="line"></span></div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:12px">
+        振込金額を入力すると、一致する取引先の組み合わせを提案します。
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:4px">振込金額（円）</div>
+          <input type="number" id="combinedAmountInput" class="field-input"
+            placeholder="例：125000" style="width:160px"
+            oninput="suggestCombination('${key}')">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:4px">入金日</div>
+          <input type="date" id="combinedDateInput" class="field-input" style="width:150px">
+        </div>
+      </div>
+      <div id="combinationResult" style="margin-top:12px"></div>
+    </div>
+  `;
+}
+
+function updatePayment(input){
+  const key = input.dataset.key;
+  const histKey = input.dataset.histkey;
+  const amount = parseFloat(input.value)||0;
+  const history = loadHistory();
+  if(!history[histKey]) return;
+  if(!history[histKey].payments) history[histKey].payments = {};
+  if(!history[histKey].payments[key]) history[histKey].payments[key] = {};
+  history[histKey].payments[key].amount = amount;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  renderPaymentPage(); // 再描画
+}
+
+function updatePaymentDate(input){
+  const key = input.dataset.key;
+  const histKey = input.dataset.histkey;
+  const date = input.value;
+  const history = loadHistory();
+  if(!history[histKey]) return;
+  if(!history[histKey].payments) history[histKey].payments = {};
+  if(!history[histKey].payments[key]) history[histKey].payments[key] = {};
+  history[histKey].payments[key].date = date;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+// 繰越設定
+function showCarryOverEdit(histKey){
+  const history = loadHistory();
+  const h = history[histKey];
+  if(!h) return;
+
+  const rows = Object.entries(h.invoices||{}).map(([k,inv])=>{
+    const carry = h.carryOver && h.carryOver[k] ? h.carryOver[k] : 0;
+    return `<tr>
+      <td style="font-size:12px">${inv.name}</td>
+      <td>
+        <input type="number" value="${carry||''}" placeholder="0"
+          data-key="${k}"
+          style="width:120px;background:var(--surface2);border:1px solid var(--border-bright);color:var(--t1);padding:5px 8px;border-radius:var(--r);font-size:12px"
+          onchange="updateCarryOver(this,'${histKey}')">
+      </td>
+    </tr>`;
+  }).join('');
+
+  // モーダル代わりに一時的なカードを表示
+  const area = document.getElementById('paymentMainArea');
+  const modal = document.createElement('div');
+  modal.className = 'card card-amber';
+  modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;width:500px;max-width:90vw;max-height:80vh;overflow-y:auto';
+  modal.innerHTML = `
+    <div class="card-title card-title-amber">繰越額設定<span class="line"></span>
+      <button class="btn btn-ghost btn-sm" onclick="this.closest('div.card').remove();document.getElementById('paymentOverlay').remove()">閉じる</button>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:12px">前月からの繰越額を入力してください。プラス=不足金、マイナス=過入金</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>取引先</th><th>繰越額（円）</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-primary" onclick="this.closest('div.card').remove();document.getElementById('paymentOverlay').remove();renderPaymentPage()">確定</button>
+    </div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'paymentOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:199';
+  overlay.onclick = ()=>{ modal.remove(); overlay.remove(); renderPaymentPage(); };
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(modal);
+}
+
+function updateCarryOver(input, histKey){
+  const key = input.dataset.key;
+  const val = parseFloat(input.value)||0;
+  const history = loadHistory();
+  if(!history[histKey]) return;
+  if(!history[histKey].carryOver) history[histKey].carryOver = {};
+  history[histKey].carryOver[key] = val;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+// 合算照合
+function suggestCombination(histKey){
+  const input = document.getElementById('combinedAmountInput');
+  const target = parseFloat(input.value)||0;
+  const result = document.getElementById('combinationResult');
+  if(target <= 0){ result.innerHTML=''; return; }
+
+  const history = loadHistory();
+  const h = history[histKey];
+  if(!h){ return; }
+
+  // 未入金の取引先リストを取得
+  const unpaidItems = Object.entries(h.invoices||{})
+    .map(([k,inv])=>{
+      const billing = Math.round(inv.total*1.1);
+      const carry = h.carryOver && h.carryOver[k] ? h.carryOver[k] : 0;
+      const totalDue = billing + carry;
+      const paid = h.payments && h.payments[k] ? h.payments[k].amount||0 : 0;
+      const remaining = totalDue - paid;
+      return { key: k, name: inv.name, amount: remaining };
+    })
+    .filter(x=>x.amount > 0);
+
+  // ±1%以内で一致する組み合わせを探す（最大4件の組み合わせ）
+  const matches = [];
+  const tolerance = target * 0.01;
+
+  // 1件一致
+  unpaidItems.forEach(item=>{
+    if(Math.abs(item.amount - target) <= tolerance){
+      matches.push({ items: [item], diff: Math.abs(item.amount-target) });
+    }
+  });
+
+  // 2件一致
+  for(let i=0;i<unpaidItems.length;i++){
+    for(let j=i+1;j<unpaidItems.length;j++){
+      const sum = unpaidItems[i].amount + unpaidItems[j].amount;
+      if(Math.abs(sum-target) <= tolerance){
+        matches.push({ items:[unpaidItems[i],unpaidItems[j]], diff:Math.abs(sum-target) });
+      }
+    }
+  }
+
+  // 3件一致
+  for(let i=0;i<unpaidItems.length;i++){
+    for(let j=i+1;j<unpaidItems.length;j++){
+      for(let k=j+1;k<unpaidItems.length;k++){
+        const sum = unpaidItems[i].amount+unpaidItems[j].amount+unpaidItems[k].amount;
+        if(Math.abs(sum-target) <= tolerance){
+          matches.push({ items:[unpaidItems[i],unpaidItems[j],unpaidItems[k]], diff:Math.abs(sum-target) });
+        }
+      }
+    }
+  }
+
+  if(matches.length === 0){
+    result.innerHTML = `<div class="alert alert-warn">一致する組み合わせが見つかりません。差額を確認してください。</div>`;
+    return;
+  }
+
+  matches.sort((a,b)=>a.diff-b.diff);
+  result.innerHTML = matches.slice(0,3).map((m,mi)=>`
+    <div style="background:var(--surface2);border:1px solid var(--border-bright);border-radius:var(--r);padding:12px;margin-bottom:8px">
+      <div style="font-size:11px;color:var(--ok);font-weight:700;margin-bottom:8px">
+        候補 ${mi+1}：${m.items.map(x=>x.name).join('＋')}
+        <span style="color:var(--t3);margin-left:8px">合計 ¥${m.items.reduce((s,x)=>s+x.amount,0).toLocaleString()}</span>
+      </div>
+      <button class="btn btn-ok btn-sm" onclick="applyPaymentSuggestion(${JSON.stringify(m.items.map(x=>x.key))},'${histKey}')">
+        この組み合わせで入金確定
+      </button>
+    </div>
+  `).join('');
+}
+
+function applyPaymentSuggestion(keys, histKey){
+  const amtInput = document.getElementById('combinedAmountInput');
+  const dateInput = document.getElementById('combinedDateInput');
+  const totalAmt = parseFloat(amtInput.value)||0;
+  const date = dateInput.value || new Date().toISOString().slice(0,10);
+
+  const history = loadHistory();
+  const h = history[histKey];
+  if(!h) return;
+  if(!h.payments) h.payments = {};
+
+  // 各取引先の未入金額を按分して入金
+  const items = keys.map(k=>{
+    const inv = h.invoices[k];
+    const billing = Math.round(inv.total*1.1);
+    const carry = h.carryOver && h.carryOver[k] ? h.carryOver[k] : 0;
+    const totalDue = billing + carry;
+    const paid = h.payments[k] ? h.payments[k].amount||0 : 0;
+    return { key: k, remaining: totalDue - paid };
+  });
+
+  items.forEach(item=>{
+    if(!h.payments[item.key]) h.payments[item.key] = {};
+    h.payments[item.key].amount = (h.payments[item.key].amount||0) + item.remaining;
+    h.payments[item.key].date = date;
+  });
+
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  document.getElementById('combinedAmountInput').value = '';
+  document.getElementById('combinationResult').innerHTML =
+    `<div class="alert alert-ok">✓ 入金を記録しました。</div>`;
+  renderPaymentPage();
+}
+
+// ================================================================
+// バックアップ・復元
+// ================================================================
+const BACKUP_KEYS = {
+  settings: ['furibunOptions','masterMap','convertMap','specialTanka','sysConfig'],
+  history:  ['monthlyHistory','lastFuribun'],
+};
+
+function getBackupData(type){
+  const keys = type === 'all'
+    ? [...BACKUP_KEYS.settings, ...BACKUP_KEYS.history]
+    : BACKUP_KEYS[type] || [];
+  const data = {};
+  keys.forEach(k=>{
+    const v = localStorage.getItem(k);
+    if(v) data[k] = JSON.parse(v);
+  });
+  return data;
+}
+
+function exportBackup(){
+  const data = getBackupData('all');
+  downloadBackupJSON(data, 'FULL');
+  recordLastBackup('FULL', Object.keys(data).length);
+  renderBackupStatus();
+}
+
+function exportBackupPartial(type){
+  const data = getBackupData(type);
+  downloadBackupJSON(data, type === 'settings' ? 'SETTINGS' : 'HISTORY');
+  recordLastBackup(type, Object.keys(data).length);
+}
+
+function downloadBackupJSON(data, label){
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  const fname = `SOMA-FUEL-BACKUP_${label}_${ts}.json`;
+
+  const payload = {
+    _meta: {
+      app: 'SOMA FUEL INVOICE SYSTEM',
+      version: '2.0',
+      exportedAt: now.toISOString(),
+      label,
+      keys: Object.keys(data),
+    },
+    data,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fname; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function recordLastBackup(type, count){
+  localStorage.setItem('lastBackupInfo', JSON.stringify({
+    time: new Date().toISOString(),
+    type, count,
+  }));
+}
+
+function handleBackupDrop(e){
+  e.preventDefault();
+  document.getElementById('backupImportArea').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if(f) importBackup(f);
+}
+
+function importBackup(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const payload = JSON.parse(e.target.result);
+
+      // バリデーション
+      if(!payload._meta || !payload.data){
+        throw new Error('このファイルはSOMA FUELのバックアップファイルではありません。');
+      }
+
+      const keys = Object.keys(payload.data);
+      const preview = document.getElementById('importPreview');
+
+      // プレビュー表示
+      preview.innerHTML = `
+        <div class="card card-ice" style="margin-top:0">
+          <div class="card-title card-title-ice">インポート内容の確認<span class="line"></span></div>
+          <div style="margin-bottom:14px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-bottom:8px">
+              エクスポート日時：${new Date(payload._meta.exportedAt).toLocaleString('ja-JP')}
+              　種別：${payload._meta.label}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${keys.map(k=>`
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                  background:var(--surface2);border:1px solid var(--border-bright);
+                  color:var(--ice);padding:3px 8px;border-radius:3px">${k}</span>
+              `).join('')}
+            </div>
+          </div>
+          <div class="alert alert-warn" style="margin-bottom:12px">
+            ⚠ 上記 ${keys.length} 項目を復元します。現在のデータは上書きされます。
+          </div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-primary" onclick="confirmImport(${JSON.stringify(payload).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;')})">
+              復元を実行
+            </button>
+            <button class="btn btn-ghost" onclick="document.getElementById('importPreview').innerHTML=''">
+              キャンセル
+            </button>
+          </div>
+        </div>`;
+
+    } catch(err){
+      document.getElementById('importPreview').innerHTML =
+        `<div class="alert alert-err">❌ ${err.message}</div>`;
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function confirmImport(payload){
+  if(!confirm('復元を実行しますか？現在のデータは上書きされます。')) return;
+
+  try {
+    Object.entries(payload.data).forEach(([k,v])=>{
+      localStorage.setItem(k, JSON.stringify(v));
+    });
+
+    // メモリ上のデータを再読み込み
+    masterData = loadMasterData();
+    sysConfig = loadSysConfig();
+    applySysConfig();
+
+    document.getElementById('importPreview').innerHTML =
+      `<div class="alert alert-ok">✅ 復元が完了しました。設定・マスターデータが更新されました。</div>`;
+
+    document.getElementById('backupImportArea').classList.add('upload-done');
+    renderBackupStatus();
+
+  } catch(err){
+    document.getElementById('importPreview').innerHTML =
+      `<div class="alert alert-err">❌ 復元に失敗しました：${err.message}</div>`;
+  }
+}
+
+function renderBackupStatus(){
+  // データ状況
+  const history = loadHistory();
+  const histKeys = Object.keys(history);
+  const furibunOpts = getFuribunOptions();
+  const masterKeys = Object.keys(getMasterMap());
+  const lastBackup = localStorage.getItem('lastBackupInfo');
+
+  document.getElementById('backupDataStatus').innerHTML = `
+    <div class="stat-tile hi">
+      <div class="stat-label">振り分け選択肢</div>
+      <div class="stat-val">${furibunOpts.length}<span class="stat-unit">件</span></div>
+    </div>
+    <div class="stat-tile ice">
+      <div class="stat-label">取引先マスター</div>
+      <div class="stat-val">${masterKeys.length}<span class="stat-unit">件</span></div>
+    </div>
+    <div class="stat-tile ok">
+      <div class="stat-label">月次履歴</div>
+      <div class="stat-val">${histKeys.length}<span class="stat-unit">ヶ月</span></div>
+    </div>
+    <div class="stat-tile ${lastBackup?'hi':'warn'}">
+      <div class="stat-label">最終バックアップ</div>
+      <div class="stat-val" style="font-size:11px;font-family:'JetBrains Mono',monospace">
+        ${lastBackup
+          ? new Date(JSON.parse(lastBackup).time).toLocaleDateString('ja-JP')
+          : '未実施'}
+      </div>
+    </div>
+  `;
+
+  // 最終バックアップ詳細
+  if(lastBackup){
+    const lb = JSON.parse(lastBackup);
+    const card = document.getElementById('lastBackupCard');
+    card.style.display = 'block';
+    document.getElementById('lastBackupInfo').innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--t2)">
+        <span>日時：<strong style="color:var(--t1)">${new Date(lb.time).toLocaleString('ja-JP')}</strong></span>
+        <span>種別：<strong style="color:var(--ice)">${lb.type}</strong></span>
+        <span>項目数：<strong style="color:var(--t1)">${lb.count}件</strong></span>
+      </div>`;
+  }
+}
+
 function exportV17CSV(){
   if(Object.keys(invoices).length === 0){
     alert('振り分けデータがありません。先にCSV処理・振り分けを完了してください。');
     return;
   }
+  // 月次履歴に保存
+  saveHistory();
+  // 振り分け記憶を保存
+  saveLastFuribun();
 
   const keiyuZei = getKeiyuZei();
   const lines = [];
@@ -2553,7 +3506,10 @@ function exportV17CSV(){
   // 出力情報表示
   const totalRows = lines.length - 1;
   document.getElementById('csvExportInfo').innerHTML =
-    `✅ ${totalRows}件を出力しました。ファイル名：${fname}`;
+    `✅ ${totalRows}件を出力しました。ファイル名：${fname}
+     <span style="margin-left:12px;color:var(--amber);cursor:pointer" onclick="showTab('backup')">
+       🛡 バックアップを取ることをお勧めします →
+     </span>`;
 }
 
 function csvEsc(v){
