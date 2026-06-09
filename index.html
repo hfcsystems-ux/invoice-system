@@ -1257,14 +1257,44 @@ select option { background: #1a2236; }
         </div>
       </div>
 
-      <!-- 振り分けプルダウン -->
+      <!-- 振り分けプルダウン＋宛名 統合管理 -->
       <div class="card">
-        <div class="card-title card-title-ice">🔀 振り分けプルダウン選択肢<span class="line"></span></div>
-        <div style="font-size:11px;color:var(--t3);margin-bottom:14px">大賀ホールレギュラー・ハイオクは特殊処理のため削除不可</div>
-        <div id="furibunMasterList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
-        <div style="display:flex;gap:8px">
-          <input id="newFuribunInput" class="field-input" placeholder="新しい選択肢を入力..." onkeydown="if(event.key==='Enter')addFuribunOption()">
-          <button class="btn btn-ice" onclick="addFuribunOption()">＋ 追加</button>
+        <div class="card-title card-title-ice">🔀 振り分け選択肢 &amp; 請求書宛名<span class="line"></span></div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:14px">
+          プルダウンの選択肢と請求書に印字される宛名を1か所で管理します。<br>
+          <span style="color:var(--amber)">大賀ホールレギュラー・ハイオク</span>は特殊処理のため削除不可。
+        </div>
+
+        <!-- 一覧テーブル -->
+        <div class="tbl-wrap" style="margin-bottom:14px">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:38%">プルダウン選択肢</th>
+                <th style="width:46%">請求書の宛名</th>
+                <th style="width:16%"></th>
+              </tr>
+            </thead>
+            <tbody id="furibunMasterList"></tbody>
+          </table>
+        </div>
+
+        <!-- 新規追加フォーム -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:1px;margin-bottom:10px">＋ NEW ENTRY</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:150px">
+              <div style="font-size:10px;color:var(--t3);margin-bottom:4px">プルダウン選択肢</div>
+              <input id="newFuribunInput" class="field-input" placeholder="例：西部小教育委員会">
+            </div>
+            <div style="flex:2;min-width:180px">
+              <div style="font-size:10px;color:var(--t3);margin-bottom:4px">請求書の宛名（空欄時は「軽井沢町役場 ＋選択肢名」）</div>
+              <input id="newFuribunLabel" class="field-input" placeholder="例：軽井沢町役場 西部小学校 教育委員会">
+            </div>
+            <div style="display:flex;align-items:flex-end">
+              <button class="btn btn-ice" onclick="addFuribunOption()">＋ 追加</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1285,25 +1315,6 @@ select option { background: #1a2236; }
             <input id="newSpecialKey" class="field-input" placeholder="油種名" style="flex:2;min-width:150px">
             <input id="newSpecialVal" type="number" class="field-input" placeholder="単価（円）" style="flex:1;min-width:100px">
             <button class="btn btn-primary" onclick="addSpecialTankaRow()">＋ 追加</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 取引先マスター -->
-      <div class="card">
-        <div class="card-title">📋 取引先マスター（請求書宛名）<span class="line"></span></div>
-        <div style="font-size:11px;color:var(--t3);margin-bottom:14px">プルダウン選択値と請求書に印字される宛名の対応表</div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th style="width:35%">選択値</th><th style="width:50%">請求書宛名</th><th></th></tr></thead>
-            <tbody id="masterTbody"></tbody>
-          </table>
-        </div>
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input id="newMasterKey" class="field-input" placeholder="プルダウン選択値" style="flex:1;min-width:150px">
-            <input id="newMasterVal" class="field-input" placeholder="請求書の宛名" style="flex:2;min-width:200px">
-            <button class="btn btn-primary" onclick="addMasterRow()">＋ 追加</button>
           </div>
         </div>
       </div>
@@ -1882,34 +1893,32 @@ function renderMaster(){
     if(el) el.value = sysConfig[k] || '';
   });
 
-  // プルダウン選択肢リスト
+  // プルダウン選択肢＋宛名 統合テーブル
   const opts = getFuribunOptions();
-  const PROTECTED = ['大賀ホールレギュラー','大賀ホールハイオク'];
-  document.getElementById('furibunMasterList').innerHTML = opts.map((o,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px">
-      <span style="font-size:13px;flex:1">${o}</span>
-      ${PROTECTED.includes(o)
-        ? '<span style="font-size:10px;color:var(--accent2);padding:2px 6px;background:rgba(245,158,11,.15);border-radius:4px">保護</span>'
-        : `<button onclick="deleteFuribunOption(${i})" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:3px 8px;border-radius:4px;font-size:11px">削除</button>`
-      }
-    </div>
-  `).join('');
-
-  // 取引先マスター
   const mm = getMasterMap();
-  document.getElementById('masterTbody').innerHTML = Object.entries(mm).map(([k,v])=>`
-    <tr>
-      <td style="font-size:12px">${k}</td>
+  const PROTECTED = ['大賀ホールレギュラー','大賀ホールハイオク'];
+  document.getElementById('furibunMasterList').innerHTML = opts.map((o,i)=>{
+    const label = mm[o] || '';
+    const isProtected = PROTECTED.includes(o);
+    return `<tr>
+      <td style="font-size:12px;color:var(--t1)">${o}
+        ${isProtected ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--amber);padding:1px 5px;background:var(--amber-trace);border-radius:3px;margin-left:6px">保護</span>` : ''}
+      </td>
       <td>
-        <input type="text" value="${v}" data-key="${k}"
-          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:12px"
+        <input type="text" value="${label}" data-key="${o}"
+          placeholder="未設定の場合「軽井沢町役場 ＋選択肢名」を使用"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border-bright);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:11px;font-family:'Noto Sans JP',sans-serif;outline:none"
+          onfocus="this.style.borderColor='var(--amber)'" onblur="this.style.borderColor='var(--border-bright)'"
           onchange="updateMasterVal(this)">
       </td>
-      <td>
-        <button onclick="deleteMasterRow('${k}')" style="background:rgba(239,68,68,.15);border:none;color:#fca5a5;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:11px">削除</button>
+      <td style="text-align:center">
+        ${isProtected
+          ? ''
+          : `<button onclick="deleteFuribunOption(${i})" class="del-btn">削除</button>`
+        }
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   // 特殊油種単価
   const st = getSpecialTanka();
@@ -1946,11 +1955,19 @@ function renderMaster(){
 
 function addFuribunOption(){
   const input = document.getElementById('newFuribunInput');
+  const labelInput = document.getElementById('newFuribunLabel');
   const val = input.value.trim();
+  const label = labelInput ? labelInput.value.trim() : '';
   if(!val){ alert('選択肢を入力してください'); return; }
   if(masterData.furibunOptions.includes(val)){ alert('すでに存在します'); return; }
+  // プルダウン選択肢に追加
   masterData.furibunOptions.push(val);
+  // 宛名が入力されていればmasterMapにも登録
+  if(label){
+    masterData.masterMap[val] = label;
+  }
   input.value = '';
+  if(labelInput) labelInput.value = '';
   renderMaster();
 }
 
@@ -1958,8 +1975,11 @@ function deleteFuribunOption(idx){
   const PROTECTED = ['大賀ホールレギュラー','大賀ホールハイオク'];
   const opt = masterData.furibunOptions[idx];
   if(PROTECTED.includes(opt)){ alert('この選択肢は削除できません'); return; }
-  if(!confirm(`「${opt}」を削除しますか？`)){ return; }
+  if(!confirm(`「${opt}」を削除しますか？\n宛名の設定も同時に削除されます。`)){ return; }
+  // プルダウンから削除
   masterData.furibunOptions.splice(idx, 1);
+  // masterMapからも削除
+  if(masterData.masterMap[opt]) delete masterData.masterMap[opt];
   renderMaster();
 }
 
